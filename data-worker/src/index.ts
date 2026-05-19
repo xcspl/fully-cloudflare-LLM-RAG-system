@@ -32,7 +32,7 @@ Key fields:
 `;
 
 async function handleIngest(request: Request, env: Env): Promise<Response> {
-  let body: { data: Record<string, unknown>; key_keys: string[]; source: string; external_url?: string | null };
+  let body: { data: Record<string, unknown>; key_keys: string[]; source: string; external_url?: string | null; slug?: string; id?: string };
   try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
   if (!body.data || !body.key_keys?.length || !body.source) {
     return json({ error: "data, key_keys, and source required" }, 400);
@@ -65,7 +65,7 @@ async function handleIngest(request: Request, env: Env): Promise<Response> {
 
     // 4. Embed
     const aiResult = await env.AI.run(EMBEDDING_MODEL_ID, { text: canonicalText });
-    const vector = Array.from(((aiResult as { data: unknown[][] }).data)[0]);
+    const vector = Array.from((aiResult as { data: number[][] }).data[0]);
 
     // 5. Vectorize
     const meta: Record<string, string> = { canonical_text: canonicalText, d1_db_id: D1_DB_NAME, d1_row_id: id, embedding_model: EMBEDDING_MODEL };
@@ -89,7 +89,7 @@ async function handleSearch(request: Request, env: Env): Promise<Response> {
 
   try {
     const aiResult = await env.AI.run(EMBEDDING_MODEL_ID, { text: body.query });
-    const vector = Array.from(((aiResult as { data: unknown[][] }).data)[0]);
+    const vector = Array.from((aiResult as { data: number[][] }).data[0]);
     const { matches } = await env.VECTORIZE.query(vector, { topK: body.topK ?? 5, returnMetadata: "all" });
     if (!matches?.length) return json({ results: [] });
 
@@ -119,7 +119,7 @@ async function healthCheck(env: Env): Promise<Response> {
   const checks: Record<string, string> = {};
   try { await env.DB.prepare("SELECT 1").run(); checks.d1 = "ok"; } catch (e) { checks.d1 = String(e); }
   try { const r = await env.AI.run(EMBEDDING_MODEL_ID, { text: "h" }); checks.ai = ((r as { data: unknown[] }).data?.length ?? 0) > 0 ? "ok" : "no data"; } catch (e) { checks.ai = String(e); }
-  try { const r = await env.AI.run(EMBEDDING_MODEL_ID, { text: "h" }); const v = Array.from(((r as { data: unknown[][] }).data)[0]); await env.VECTORIZE.query(v, { topK: 1 }); checks.vectorize = "ok"; } catch (e) { checks.vectorize = String(e); }
+  try { const r = await env.AI.run(EMBEDDING_MODEL_ID, { text: "h" }); const v = Array.from(((r as { data: number[][] }).data)[0]); await env.VECTORIZE.query(v, { topK: 1 }); checks.vectorize = "ok"; } catch (e) { checks.vectorize = String(e); }
   return json(checks, Object.values(checks).every((v) => v === "ok") ? 200 : 500);
 }
 
