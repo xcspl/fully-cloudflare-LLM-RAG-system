@@ -1,74 +1,69 @@
 # gAIa — AI Chatbot Framework
 
-Data-source-neutral chatbot infrastructure. Ingests documents → serves RAG-augmented chat via Cloudflare Workers.
+Two independent Workers, shared CF infra. Deployed and end-to-end tested.
 
-## Components
+## Set 1: Org Knowledge RAG — DEPLOYED
 
 | Component | Location | Status | Description |
 |-----------|----------|--------|-------------|
-| CF Worker | `worker/` | ⬚ pending | gAIa chatbot — handles /chat, RAG, LLM proxy |
-| D1 Database | `worker/wrangler.toml` | ⬚ pending | Structured data: system messages, doc metadata, sessions |
-| Vectorize Index | `worker/wrangler.toml` | ⬚ pending | Vector store for RAG, 1024d cosine (bge-m3) |
-| AI Gateway | `scripts/setup-gateway.py` | ⬚ pending | Single entry point for all LLM calls. Custom provider: minimax |
-| Chat LLM | via AI Gateway | ✅ creds available | Minimax via custom-minimax on gateway |
-| Canonicalization LLM | `ingest/src/canonicalize.ts` | ⬚ pending | Distills raw chunks to canonical text |
-| Embedding Model | CF Workers AI bge-m3 | ⬚ pending | 1024d, 60k context, $0.012/M, multi-lingual |
-| Ingestion Pipeline | `ingest/` | ⬚ pending | Chunk → canonicalize → embed → upload |
-| Prompt Templates | `prompts-and-system-messages/` | ⬚ pending | System messages, organized by project |
-| Bootstrap Script | `scripts/bootstrap-d1.ts` | ⬚ pending | Create D1 tables, seed system messages |
-| Health Check | `scripts/health-check.ts` | ⬚ pending | Verify all components are live |
-
-## Content Resolution Strategy
-
-A vector in Vectorize is a **pointer** — it doesn't contain the full content, it tells the Worker where to get it. Three resolution strategies:
-
-| content_type | Field | Behavior | Example |
-|---|---|---|---|
-| `inline` | `raw_content` | Content stored directly | Static docs, policies, guides |
-| `db_ref` | `db_ref` (JSON) | Execute query against D1 binding | Live data: posts, users, transactions |
-| `url` | `url_ref` | HTTP fetch | External sources, APIs, websites |
-
-`db_ref` format: `{ "db": "gaia-db", "query": "SELECT content FROM posts WHERE id = ?", "params": ["abc123"] }`
-
-All `db_ref` targets are within CF infra (D1 bindings the Worker has access to). URLs can point anywhere.
-
-## Connections
+| Worker | `worker/` | ✅ Deployed | `https://gaia.sumanta-7a8.workers.dev` |
+| D1 | `documents` table | ✅ Created | Shared knowledge — org info, app docs, projects |
+| Vectorize | `gaia-docs-bge-m3` | ✅ Created | 1024d cosine, metadata → D1 pointer |
+| Access | — | Open | All users see the same knowledge |
 
 ```
-Ingestion:
-  Raw file/URL → Chunker → Canonicalize LLM → Canonical text
-                                              │
-  Canonical text → bge-m3 embed → Vectorize (vector + doc_id pointer)
-  Resolution info (content_type, raw_content/db_ref/url_ref) → D1
-
-Query:
-  User message → bge-m3 embed → Vectorize (search canonical vectors, get doc_ids)
-  doc_ids → D1 (fetch rows, resolve content by content_type)
-  Resolved content + System message + Session history → AI Gateway → Chat LLM → Stream back
+POST /ingest  → D1 store → canonicalize (custom-deep2/deepseek-v4-flash) → bge-m3 embed → Vectorize
+POST /chat    → bge-m3 embed → Vectorize search → D1 fetch → LLM (custom-minimax/MiniMax-M2.7) → stream
 ```
+
+## Set 2: User Chat Memory — SCAFFOLDED
+
+| Component | Location | Status | Description |
+|-----------|----------|--------|-------------|
+| Worker | `chat-memory-worker/` | ⬚ Not deployed | On hold until Set 1 stable |
+| D1 | `chat_summaries` table | ✅ Created | Per-user summaries (has `user_id`) |
+| Vectorize | `gaia-chat-summaries-bge-m3` | ✅ Created | 1024d cosine, metadata includes `user_id` |
+
+## Shared Infrastructure
+
+| Component | Used by | Status | Details |
+|-----------|---------|--------|---------|
+| D1 | Both | ✅ | `gaia-db` — 4 tables created |
+| AI Gateway | Both | ✅ | `et-gaia` — custom-minimax, custom-deep2 |
+| bge-m3 | Both | ✅ | Via Workers AI binding |
+| CF Account | Both | ✅ | `{ACCOUNT_ID}` |
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Per-inference context, naming rules, gotchas |
+| `framework.md` | This file — full map of all components |
+| `todo.md` | Pending work and priorities |
+| `cloudflare-findings.md` | Gotchas discovered during implementation |
+| `worker/src/index.ts` | Main Worker: `/ingest`, `/chat`, `/health` |
+| `worker/src/rag.ts` | Vectorize search, D1 fetch, context assembly |
+| `worker/src/llm.ts` | LLM client via AI Gateway |
+| `worker/src/ingest.ts` | Ingestion pipeline (D1 → canonicalize → embed → Vectorize) |
+| `scripts/setup-gateway.py` | Python: create AI Gateway + custom provider |
+| `scripts/ingest-data.py` | Python: send JSON files to `/ingest` |
+| `scripts/bootstrap-d1.ts` | D1 schema + seed prompts |
+| `data-ingest/` | JSON files for ingestion |
+| `prompts-and-system-messages/` | Prompt templates (default domain + per-project) |
+| `notes/` | Design notes, provider specs, setup guides |
 
 ## Environment Variables
 
 See `.env.example`. Core vars:
-- `CF_ACCOUNT_ID` / `CF_API_TOKEN` — Cloudflare account + API
-- `CF_AI_GATEWAY_ID` / `CF_AI_GATEWAY_TOKEN` — AI Gateway (created by setup-gateway.py)
-- `LLM_API_KEY` / `LLM_BASE_URL` — Chat LLM (base_url = gateway URL)
-- `CANON_LLM_API_KEY` / `CANON_LLM_BASE_URL` — Canonicalization LLM
+- `CF_ACCOUNT_ID` / `CF_AIG_TOKEN` — Cloudflare / Gateway
+- `LLM_BASE_URL` / `LLM_PROVIDER` / `LLM_MODEL` / `LLM_API_MODE` — Chat LLM
+- `CANON_PROVIDER` / `CANON_MODEL` — Canonicalization LLM (independent)
+- `WORKER_URL` — Deployed Worker URL (for ingest scripts)
 
 ## Quick Start
 
 1. `cp .env.example .env` and fill in values
-2. `cd worker && npm install && npx wrangler d1 create gaia-db`
-3. Update `worker/wrangler.toml` with the D1 database_id
-4. `npx wrangler secret put LLM_API_KEY`
-5. `npx wrangler deploy`
-6. Place documents in `ingest/data/` and run the ingest pipeline
-
-## Current State
-
-- [ ] Worker deployed
-- [ ] D1 tables created
-- [ ] Vectorize index created
-- [ ] First documents ingested
-- [ ] Chat endpoint working end-to-end
-- [ ] Client integration tested
+2. `cd worker && npm install`
+3. `npx wrangler secret put CF_AIG_TOKEN`
+4. `npx wrangler deploy`
+5. `python scripts/ingest-data.py data-ingest/sample.json`

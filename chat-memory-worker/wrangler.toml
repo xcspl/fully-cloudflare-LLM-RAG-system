@@ -1,4 +1,4 @@
-name = "gaia"
+name = "gaia-chat-memory"
 main = "src/index.ts"
 compatibility_date = "2025-05-15"
 account_id = "{ACCOUNT_ID}"
@@ -10,7 +10,7 @@ database_id = "fc21c7ca-0233-4bf6-8372-2352d0faaf8e"
 
 [[vectorize]]
 binding = "VECTORIZE"
-index_name = "gaia-docs-bge-m3"
+index_name = "gaia-chat-summaries-bge-m3"
 
 [ai]
 binding = "AI"
@@ -19,9 +19,7 @@ binding = "AI"
 enabled = true
 
 [vars]
-LLM_BASE_URL = "https://gateway.ai.cloudflare.com/v1/{ACCOUNT_ID}/et-gaia"
+LLM_BASE_URL = ""
 LLM_PROVIDER = "custom-minimax"
 LLM_MODEL = "MiniMax-M2.7"
 LLM_API_MODE = "openai"
-CANON_PROVIDER = "custom-deep2"
-CANON_MODEL = "deepseek-v4-flash"

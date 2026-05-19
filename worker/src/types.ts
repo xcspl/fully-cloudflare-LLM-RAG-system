@@ -17,26 +17,37 @@ export interface Session {
   updated_at: string;
 }
 
+export interface IngestRequest {
+  data: Record<string, unknown>;
+  key_keys: string[];
+  source: string;
+  external_url?: string | null;
+}
+
 export type ContentType = "inline" | "db_ref" | "url";
 
 export interface DbRef {
-  db: string;        // D1 binding name, e.g. "DB", "gaia-db"
-  query: string;     // SQL query
-  params: unknown[]; // Bound parameters
+  db: string;
+  query: string;
+  params: unknown[];
+}
+
+export interface DocumentData {
+  title: string;
+  canonical: string;
+  content_type: ContentType;
+  raw_content?: string;
+  db_ref?: DbRef;
+  url_ref?: string;
+  chunk_index: number;
+  [key: string]: unknown;  // extensible
 }
 
 export interface Document {
   id: string;
   source: string;
-  title: string;
-  canonical: string;
-  content_type: ContentType;
-  raw_content: string | null;     // inline
-  db_ref: string | null;          // JSON: DbRef
-  url_ref: string | null;         // URL
-  chunk_index: number;
-  metadata: string | null;
-  embedding_model: string | null;  // e.g. "embeddings-bge-m3"
+  data: DocumentData;       // parsed from JSON column
+  embedding_model: string | null;
   created_at: string;
 }
 
@@ -48,14 +59,16 @@ export interface SystemMessage {
   priority: number;
 }
 
+export interface VectorizeMetadata {
+  canonical_text: string;           // What was vectorized
+  d1_db_id: string;                // D1 database name, e.g. "gaia-db"
+  d1_row_id: string;               // D1 row UUID (our doc_id)
+  external_url: string | null;     // Optional external source URL
+  embedding_model: string;         // e.g. "embeddings-bge-m3"
+}
+
 export interface VectorizeMatch {
   id: string;
   score: number;
-  metadata?: {
-    doc_id: string;
-    source: string;
-    title: string;
-    chunk_index: number;
-    embedding_model: string;       // e.g. "embeddings-bge-m3"
-  };
+  metadata?: VectorizeMetadata;
 }

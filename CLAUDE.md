@@ -1,73 +1,59 @@
 # gAIa — AI Chatbot Framework
 
-Data-source-neutral chatbot infrastructure. A Cloudflare Worker provides AI chat with RAG using Vectorize + D1. This directory manages all config, scripts, prompts, and plans.
+Two independent Workers sharing CF infra (D1, AI Gateway, bge-m3). Deployed and end-to-end tested.
 
-## Architecture (crucial)
-
-```
-Client → CF Worker (/chat) → bge-m3 (embed query) → Vectorize (search canonical vectors)
-                           → D1 (resolve content, system messages, sessions)
-                           → CF AI Gateway (custom-minimax) → Chat LLM (inference, stream back)
-```
-
-All LLM traffic goes through CF AI Gateway — caching, rate limiting, analytics. Never call providers directly.
-
-## Ingestion pipeline
+## Set 1: Org Knowledge RAG (`worker/`) — DEPLOYED
 
 ```
-Raw doc → chunk (2k-4k tokens) → canonicalize (LLM distill) → bge-m3 (embed canonical) 
-        → D1 row + Vectorize vector
+POST /ingest → D1 store → canonicalize (custom-deep2/deepseek-v4-flash) → bge-m3 embed → Vectorize
+POST /chat   → bge-m3 embed → Vectorize search → D1 fetch → LLM (custom-minimax/MiniMax-M2.7) → stream
 ```
 
-The **canonical text** is what gets vectorized. The **resolved content** is what gets fed to the chat LLM as RAG context. They are different things.
+- No user filtering — shared org knowledge
+- Vectorize: `gaia-docs-bge-m3`, D1: `documents` table
+- Deployed at: `https://gaia.sumanta-7a8.workers.dev`
+- Key files: `index.ts`, `ingest.ts`, `rag.ts`, `llm.ts`, `system-messages.ts`
 
-## Content resolution (how vectors point to data)
+## Set 2: User Chat Memory (`chat-memory-worker/`) — SCAFFOLDED
 
-Each D1 row has a `content_type` that tells the Worker how to resolve full content at query time:
+- Vectorize: `gaia-chat-summaries-bge-m3`, D1: `chat_summaries` table
+- User-isolated via `user_id` in metadata filter
+- Not deployed yet — on hold until Set 1 is stable
 
-| content_type | Field | Behavior |
-|---|---|---|
-| `inline` | `raw_content` | Text stored directly, use as-is |
-| `db_ref` | `db_ref` (JSON) | Execute query against a D1 binding, use results |
-| `url` | `url_ref` | `fetch()` the URL, use response body |
+## Shared infra (all deployed)
 
-`db_ref` format: `{ "db": "gaia-db", "query": "SELECT ...", "params": [...] }` — all targets within CF infra.
+- **D1**: `gaia-db` — tables: `documents`, `chat_summaries`, `sessions`, `system_messages`
+- **AI Gateway**: `et-gaia` — providers: `custom-minimax` (chat), `custom-deep2` (canonicalization)
+- **Embedding**: `bge-m3` (1024d, 60k context, $0.012/M)
+- **Account**: `{ACCOUNT_ID}`
 
-## Key files
+## Ingestion flow
 
-- `worker/src/index.ts` — `/chat`, `/chat/history`, `/health`
-- `worker/src/rag.ts` — Vectorize search, D1 fetch, content resolution, session management
-- `worker/src/llm.ts` — LLM client routing through AI Gateway (adds cf-aig-authorization header)
-- `worker/src/system-messages.ts` — keyword-triggered prompt selection from D1
-- `worker/src/types.ts` — shared types (Document with content_type, DbRef, etc.)
-- `ingest/src/canonicalize.ts` — LLM distills raw chunks to canonical text
-- `ingest/src/embed.ts` — bge-m3 embedding (to implement)
-- `scripts/setup-gateway.py` — Python: creates AI Gateway + custom provider for Minimax
-- `scripts/bootstrap-d1.ts` — D1 schema + seed data
-- `prompts-and-system-messages/` — system prompt templates, organized by project
+Data arrives as arbitrary JSON → D1 store (get `d1_row_id`) → extract `key_keys` → canonicalize → embed → Vectorize (with metadata pointer back to D1)
+
+## Query flow (RAG)
+
+User message → bge-m3 embed → Vectorize.search (matches returned, NOT data) → D1 fetch `d1_row_id` → assemble context → inject into system prompt as "Knowledge Base Results" → LLM
 
 ## Naming convention
 
-**No provider brand names in code.** Use:
-- `callLlm`, `LlmConfig` (never provider-specific names)
-- `LLM_API_KEY`, `LLM_BASE_URL`, `CANON_LLM_API_KEY`, `CANON_LLM_BASE_URL`
-- The ONLY brand names allowed: `embedding_model` column values. Convention: `embeddings-<model-slug>` (e.g. `embeddings-bge-m3`, future `embeddings-gemini-embedding-2`). This names the vector column that holds the actual embedding data.
+- No provider brand names in code
+- `embedding_model` column: `embeddings-<slug>` (e.g. `embeddings-bge-m3`)
+- Vectorize index names: `{name}-{model}` (e.g. `gaia-docs-bge-m3`)
+- Vectorize metadata keys: `canonical_text`, `d1_db_id`, `d1_row_id`, `external_url`, `user_id` (chat only), `embedding_model`
 
-## Key design decisions
+## Key gotchas
 
-- **Vector as pointer**: Vectorize entry points to D1 row; D1 row resolves to actual content (inline, DB query, or URL)
-- **Two-step ingestion**: raw chunk → canonicalize (LLM) → embed (bge-m3) — never embed raw prose
-- **bge-m3**: 1024d, 60k token context, $0.012/M tokens, multi-lingual
-- **D1 + Vectorize**: D1 holds canonical text + resolution fields; Vectorize holds vectors + doc_id pointer
-- **Prompt selection**: keyword-trigger based from `system_messages` D1 table, falls back to `default`
-- **Sessions**: JSON messages array in D1, last 10 exchanges as context window
-- **Streaming**: SSE pass-through from chat LLM to client
+- `VECTORIZE.query()` returns `{ matches, count }`, NOT `{ data }`
+- `env.AI.run()` returns nested `{ data: [[...]] }` — always `Array.from(data[0])`
+- Vectorize metadata values must be strings — omit null keys
+- `ExecutionContext` is runtime-injected, not constructable
+- `wrangler d1 execute` needs `--remote` for production, `unset CF_API_TOKEN` if using OAuth
+- AI Gateway auth header is `cf-aig-authorization`, not `Authorization`
 
 ## What NOT to do
 
 - Don't hardcode domain knowledge or project names in code
-- Don't hardcode model names in LLM requests (no `model` field unless explicitly configured)
-- Don't add provider-specific fields to the API call
+- Don't embed raw content directly — always canonicalize first
 - Don't use brand names in variable/function names or comments
 - Don't log API keys or full prompts to observability
-- Don't embed raw content directly — always canonicalize first

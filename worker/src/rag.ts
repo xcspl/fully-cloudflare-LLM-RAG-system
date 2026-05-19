@@ -1,11 +1,17 @@
-import type { ChatMessage, Session, VectorizeMatch, Document } from "./types";
+import type { ChatMessage, Session, VectorizeMatch, Document, DocumentData } from "./types";
 
 export interface Env {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
-  LLM_API_KEY: string;
+  AI: Ai;
+  CF_AIG_TOKEN: string;
   LLM_BASE_URL: string;
-  CF_AI_GATEWAY_TOKEN?: string;
+  LLM_PROVIDER: string;
+  LLM_MODEL: string;
+  LLM_API_MODE: string;
+  LLM_MAX_TOKENS?: string;
+  CANON_PROVIDER: string;  // "custom-deep2"
+  CANON_MODEL: string;     // "deepseek-v4-flash"
 }
 
 export async function loadSession(
@@ -60,11 +66,18 @@ export async function searchVectorize(
   query: string,
   topK: number = 5,
 ): Promise<VectorizeMatch[]> {
-  const { data } = await env.VECTORIZE.query(query, {
+  // Embed query via Workers AI bge-m3
+  const embedResult = await env.AI.run("@cf/baai/bge-m3", { text: query });
+  const raw = embedResult as { data: unknown };
+  // data is nested: [[n1, n2, ...]] — extract inner array and convert to plain number[]
+  const inner = (raw.data as unknown[][])[0];
+  const queryVector: number[] = Array.from(inner as Iterable<number>);
+
+  const result = await env.VECTORIZE.query(queryVector, {
     topK,
     returnMetadata: "all",
   });
-  return (data as VectorizeMatch[]) ?? [];
+  return (result.matches as VectorizeMatch[]) ?? [];
 }
 
 export async function fetchDocuments(
@@ -72,7 +85,7 @@ export async function fetchDocuments(
   matches: VectorizeMatch[],
 ): Promise<Document[]> {
   const ids = matches
-    .map((m) => m.metadata?.doc_id)
+    .map((m) => m.metadata?.d1_row_id)
     .filter((id): id is string => !!id);
 
   if (ids.length === 0) return [];
@@ -82,14 +95,36 @@ export async function fetchDocuments(
     `SELECT * FROM documents WHERE id IN (${placeholders})`,
   )
     .bind(...ids)
-    .all<Document>();
+    .all<Omit<Document, "data"> & { data: string }>();
 
-  return results ?? [];
+  return (results ?? []).map((row) => ({
+    ...row,
+    data: JSON.parse(row.data) as DocumentData,
+  }));
 }
 
-export function assembleContext(docs: Document[]): string {
-  if (docs.length === 0) return "";
-  return docs
-    .map((d) => `[${d.title}]\n${d.raw_content}`)
-    .join("\n\n---\n\n");
+export function assembleContext(
+  docs: Document[],
+  matches: VectorizeMatch[],
+): string {
+  if (docs.length === 0 && matches.length === 0) return "";
+
+  const parts: string[] = [];
+
+  for (const d of docs) {
+    parts.push(
+      `## Source: ${d.data.title}\n${d.data.raw_content ?? d.data.canonical}`,
+    );
+  }
+
+  // Fallback: use canonical_text from Vectorize metadata for matches without D1 rows
+  for (const m of matches) {
+    if (m.metadata?.canonical_text && !docs.some((d) => d.id === m.metadata?.d1_row_id)) {
+      parts.push(
+        `## Source: vector match (relevance: ${m.score.toFixed(2)})\n${m.metadata.canonical_text}`,
+      );
+    }
+  }
+
+  return parts.join("\n\n");
 }

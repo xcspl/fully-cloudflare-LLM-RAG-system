@@ -1,9 +1,14 @@
 import type { ChatMessage } from "./types";
 
+export type ApiMode = "openai" | "anthropic";
+
 export interface LlmConfig {
-  apiKey: string;
-  baseUrl: string;        // https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/custom-minimax/v1
-  gatewayToken?: string;  // CF AI Gateway token (cf-aig-authorization header)
+  gatewayToken: string;  // cf-aig-authorization header (provider key stored in gateway)
+  baseUrl: string;       // https://gateway.ai.cloudflare.com/v1/{account}/{gateway}
+  providerSlug: string;  // "custom-minimax"
+  model: string;         // "MiniMax-M2.7"
+  apiMode: ApiMode;      // "openai" → /v1/chat/completions | "anthropic" → /v1/messages
+  maxTokens?: number;    // Required for anthropic mode (default 4096)
 }
 
 export async function callLlm(
@@ -11,20 +16,26 @@ export async function callLlm(
   messages: ChatMessage[],
   stream: boolean = true,
 ): Promise<Response> {
-  const url = `${config.baseUrl}/chat/completions`;
+  const path = config.apiMode === "anthropic"
+    ? `${config.baseUrl}/${config.providerSlug}/v1/messages`
+    : `${config.baseUrl}/${config.providerSlug}/v1/chat/completions`;
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${config.apiKey}`,
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages,
+    stream,
   };
 
-  if (config.gatewayToken) {
-    headers["cf-aig-authorization"] = `Bearer ${config.gatewayToken}`;
+  if (config.apiMode === "anthropic") {
+    body.max_tokens = config.maxTokens ?? 4096;
   }
 
-  return fetch(url, {
+  return fetch(path, {
     method: "POST",
-    headers,
-    body: JSON.stringify({ messages, stream }),
+    headers: {
+      "Content-Type": "application/json",
+      "cf-aig-authorization": `Bearer ${config.gatewayToken}`,
+    },
+    body: JSON.stringify(body),
   });
 }
