@@ -14,19 +14,29 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders() });
+    }
+
+    let response: Response;
+
     if (url.pathname === "/chat" && request.method === "POST") {
-      return handleChat(request, env, ctx);
+      response = await handleChat(request, env, ctx);
+    } else if (url.pathname === "/chat/history" && request.method === "GET") {
+      response = await handleHistory(request, env);
+    } else if (url.pathname === "/health" && request.method === "GET") {
+      response = await healthCheck(env);
+    } else {
+      response = new Response("Not found", { status: 404 });
     }
 
-    if (url.pathname === "/chat/history" && request.method === "GET") {
-      return handleHistory(request, env);
+    // Add CORS to all responses
+    const headers = corsHeaders();
+    for (const [k, v] of Object.entries(headers)) {
+      response.headers.set(k, v);
     }
-
-    if (url.pathname === "/health" && request.method === "GET") {
-      return healthCheck(env);
-    }
-
-    return new Response("Not found", { status: 404 });
+    return response;
   },
 };
 
@@ -175,6 +185,14 @@ async function healthCheck(env: Env): Promise<Response> {
     checks.data_worker = r.ok ? "ok" : `status ${r.status}`;
   } catch (e) { checks.data_worker = String(e); }
   return json(checks, Object.values(checks).every((v) => v === "ok") ? 200 : 500);
+}
+
+function corsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
 }
 
 function json(data: unknown, status = 200): Response {

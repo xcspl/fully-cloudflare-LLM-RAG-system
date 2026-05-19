@@ -12,6 +12,8 @@ body{font:14px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;height:
 .msg.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:.25rem}
 .msg.assistant{align-self:flex-start;background:#1e1e1e;border:1px solid #333;border-bottom-left-radius:.25rem}
 .msg.assistant strong{color:#fbbf24}.msg.assistant em{color:#93c5fd}.msg.assistant code{background:#333;padding:.1em .3em;border-radius:3px;font-size:13px}
+.think{display:block;font-size:12px;color:#666;cursor:pointer;margin:.3em 0;padding:.3em .5em;border-left:2px solid #444;background:#111;border-radius:0 4px 4px 0;user-select:none}
+.think:hover{color:#999}.think.open{color:#aaa}.think .body{display:none;margin-top:.3em;color:#999;white-space:pre-wrap}.think.open .body{display:block}
 .spin{display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;animation:d .6s infinite alternate}
 .spin:nth-child(2){animation-delay:.2s}.spin:nth-child(3){animation-delay:.4s}
 @keyframes d{to{background:#fff;transform:translateY(-6px)}}
@@ -66,25 +68,18 @@ document.getElementById("form").onsubmit = async (e) => {
           try {
             const j = JSON.parse(l.slice(6));
             const c = j.choices?.[0]?.delta?.content;
-            if (c) div.innerHTML += c.replace(/</g, "&lt;");
+            if (c) div.innerHTML += c;
           } catch {}
         }
       }
+      div.innerHTML = format(div.innerHTML);
       if (!div.innerHTML.trim()) div.innerHTML = "<em>(empty)</em>";
     } else {
       const d = await r.json();
       div.innerHTML = d.reply
-        ? d.reply.replace(/</g, "&lt;")
+        ? format(d.reply)
         : "<em>(no response)</em>";
     }
-
-    // Strip think blocks and basic markdown
-    div.innerHTML = div.innerHTML
-      .replace(/<\/think>/g, "")
-      .replace(/<think>[\s\S]*?<\/think>/g, "")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/\n/g, "<br>");
 
   } catch (x) {
     div.innerHTML = "<em>Error: " + x.message + "</em>";
@@ -100,6 +95,17 @@ function add(role, text) {
     : text.replace(/</g, "&lt;");
   log.appendChild(d);
   return d;
+}
+
+function format(text) {
+  return text
+    .replace(/<\/think>/g, "")
+    .replace(/<think>([\s\S]*?)<\/think>/g, (_, t) =>
+      `<span class="think" onclick="this.classList.toggle('open')">💭 Thinking...<span class="body">${t.replace(/</g,"&lt;")}</span></span>`)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/</g, "&lt;")
+    .replace(/\n/g, "<br>");
 }
 </script>
 </body>
