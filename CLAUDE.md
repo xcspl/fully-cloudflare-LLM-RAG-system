@@ -2,6 +2,8 @@
 
 Two independent Workers sharing CF infra (D1, AI Gateway, bge-m3). Deployed and end-to-end tested.
 
+`reference-impls/` contains examples of similar work by others (cloned third-party repos). Reference for patterns, not our code. Gitignored.
+
 ## Set 1: Org Knowledge RAG (`worker/`) — DEPLOYED
 
 ```

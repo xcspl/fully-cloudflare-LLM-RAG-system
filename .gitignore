@@ -38,3 +38,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Reference implementations (third-party, not our code)
+reference-impls/

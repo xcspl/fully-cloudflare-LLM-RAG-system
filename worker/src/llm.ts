@@ -1,21 +1,33 @@
-import type { ChatMessage } from "./types";
+import type { ChatMessage, ToolCall } from "./types";
+import type { ToolDefinition } from "./tools";
 
 export type ApiMode = "openai" | "anthropic";
 
 export interface LlmConfig {
-  gatewayToken: string;  // cf-aig-authorization header (provider key stored in gateway)
-  baseUrl: string;       // https://gateway.ai.cloudflare.com/v1/{account}/{gateway}
-  providerSlug: string;  // "custom-minimax"
-  model: string;         // "MiniMax-M2.7"
-  apiMode: ApiMode;      // "openai" → /v1/chat/completions | "anthropic" → /v1/messages
-  maxTokens?: number;    // Required for anthropic mode (default 4096)
+  gatewayToken: string;
+  baseUrl: string;
+  providerSlug: string;
+  model: string;
+  apiMode: ApiMode;
+  maxTokens?: number;
+}
+
+export interface LlmResponse {
+  content: string | null;
+  toolCalls: ToolCall[] | null;
+  finishReason: string;
 }
 
 export async function callLlm(
   config: LlmConfig,
   messages: ChatMessage[],
-  stream: boolean = true,
+  options: {
+    stream?: boolean;
+    tools?: ToolDefinition[];
+    maxTokens?: number;
+  } = {},
 ): Promise<Response> {
+  const stream = options.stream ?? true;
   const path = config.apiMode === "anthropic"
     ? `${config.baseUrl}/${config.providerSlug}/v1/messages`
     : `${config.baseUrl}/${config.providerSlug}/v1/chat/completions`;
@@ -25,6 +37,17 @@ export async function callLlm(
     messages,
     stream,
   };
+
+  if (options.tools?.length) {
+    body.tools = options.tools;
+    body.tool_choice = "auto";
+  }
+
+  if (options.maxTokens) {
+    body.max_tokens = options.maxTokens;
+  } else if (config.maxTokens) {
+    body.max_tokens = config.maxTokens;
+  }
 
   if (config.apiMode === "anthropic") {
     body.max_tokens = config.maxTokens ?? 4096;
@@ -38,4 +61,31 @@ export async function callLlm(
     },
     body: JSON.stringify(body),
   });
+}
+
+// Parse a non-streaming LLM response into LlmResponse
+export function parseLlmResponse(data: Record<string, unknown>): LlmResponse {
+  const choice = (data.choices as Array<Record<string, unknown>>)?.[0];
+  if (!choice) return { content: null, toolCalls: null, finishReason: "error" };
+
+  const message = choice.message as Record<string, unknown> | undefined;
+  const finishReason = (choice.finish_reason as string) ?? "error";
+
+  // Tool calls
+  const rawCalls = message?.tool_calls as Array<Record<string, unknown>> | undefined;
+  if (rawCalls?.length) {
+    const toolCalls: ToolCall[] = rawCalls.map((tc) => ({
+      id: tc.id as string,
+      name: (tc.function as Record<string, string>)?.name ?? "",
+      arguments: (tc.function as Record<string, string>)?.arguments ?? "{}",
+    }));
+    return { content: null, toolCalls, finishReason };
+  }
+
+  // Regular content
+  return {
+    content: (message?.content as string) ?? null,
+    toolCalls: null,
+    finishReason,
+  };
 }

@@ -1,12 +1,21 @@
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
 }
 
 export interface ChatRequest {
   message: string;
   user_id: string;
   session_id?: string;
+  stream?: boolean;  // default true — SSE streaming vs plain JSON
 }
 
 export interface Session {
