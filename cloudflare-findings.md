@@ -2,6 +2,14 @@
 
 Gotchas and discoveries during gAIa implementation.
 
+## Minimax M2.7 Tool Calling
+
+- **Must preserve full tool_call structure**: `{ id, index, type, function: { name, arguments } }`. Dropping `index` or flattening `function` causes `choices: null`.
+- **Tool result role**: `role: "tool"` WITH `tool_call_id` works. Without `tool_call_id`, Minimax returns `choices: null`. `role: "user"` as tool result returns error 2013.
+- **No `tool_choice`**: Do NOT send `tool_choice: "auto"` — Minimax doesn't need it and may reject.
+- **Final call without tools**: After tool loop, call WITHOUT tools. Minimax accepts tool messages in history if no tools in current request.
+- **Streaming limitation**: Cannot stream when tool messages are in history (Minimax 520). Use non-streaming JSON for tool-based responses.
+
 ## AI Gateway
 
 - **Custom providers**: Slug must not include path segments (e.g., `base_url: "https://api.minimax.io"`, path goes in the request URL). Including `/v1` in base_url causes duplicate path segments.

@@ -3,58 +3,79 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>gAIa Chat</title>
+<title>gAIa — EarthTeam AI</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font:14px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;height:100dvh;display:flex;flex-direction:column}
 #log{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.75rem}
+.welcome{text-align:center;color:#666;margin-top:3rem;line-height:1.8}
+.welcome h1{color:#e0e0e0;font-size:1.3rem;margin-bottom:.5rem}
 .msg{max-width:80%;padding:.6rem 1rem;border-radius:1rem;white-space:pre-wrap;word-break:break-word}
 .msg.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:.25rem}
 .msg.assistant{align-self:flex-start;background:#1e1e1e;border:1px solid #333;border-bottom-left-radius:.25rem}
-.msg.assistant strong{color:#fbbf24}.msg.assistant em{color:#93c5fd}.msg.assistant code{background:#333;padding:.1em .3em;border-radius:3px;font-size:13px}
+.msg.assistant strong{color:#fbbf24}.msg.assistant em{color:#93c5fd}
+.msg.assistant code{background:#333;padding:.1em .3em;border-radius:3px;font-size:13px}
+.msg.assistant pre{background:#0a0a0a;border:1px solid #333;border-radius:6px;padding:.75rem;margin:.5em 0;overflow-x:auto;font-size:13px;line-height:1.4}
+.msg.assistant pre code{background:none;padding:0}
 .think{display:block;font-size:12px;color:#666;cursor:pointer;margin:.3em 0;padding:.3em .5em;border-left:2px solid #444;background:#111;border-radius:0 4px 4px 0;user-select:none}
 .think:hover{color:#999}.think.open{color:#aaa}.think .body{display:none;margin-top:.3em;color:#999;white-space:pre-wrap}.think.open .body{display:block}
 .spin{display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;animation:d .6s infinite alternate}
 .spin:nth-child(2){animation-delay:.2s}.spin:nth-child(3){animation-delay:.4s}
 @keyframes d{to{background:#fff;transform:translateY(-6px)}}
+#footer{display:flex;flex-direction:column}
+#toolbar{display:flex;justify-content:space-between;align-items:center;padding:.3rem 1rem;background:#0a0a0a}
+#toolbar span{font-size:11px;color:#555;cursor:pointer}
+#toolbar span:hover{color:#999}
 #form{display:flex;padding:.75rem;gap:.5rem;border-top:1px solid #222;background:#0a0a0a}
 #form input{flex:1;padding:.6rem 1rem;border:1px solid #333;border-radius:1.5rem;background:#1a1a1a;color:#e0e0e0;font-size:14px;outline:none}
 #form input:focus{border-color:#3b82f6}
 #form button{padding:.6rem 1.25rem;border:none;border-radius:1.5rem;background:#2563eb;color:#fff;font-size:14px;cursor:pointer}
 #form button:hover{background:#1d4ed8}
+#form button.stop{background:#dc2626;display:none}
+#form button.stop:hover{background:#b91c1c}
+.fade{color:#555;font-size:11px;text-align:center;padding:.3rem 0}
 </style>
 </head>
 <body>
-<div id="log"></div>
-<form id="form"><input id="input" placeholder="Ask gAIa..." autofocus><button>Send</button></form>
+<div id="log"><div class="welcome"><h1>gAIa</h1><p>EarthTeam's AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits, or anything about protecting the planet.</p></div></div>
+<div id="footer">
+<div id="toolbar"><span onclick="newChat()">+ New chat</span><span class="fade">gAIa may make mistakes. Verify important info.</span></div>
+<form id="form"><input id="input" placeholder="Ask gAIa..." autofocus><button id="sendBtn">Send</button><button class="stop" id="stopBtn" type="button">Stop</button></form>
+</div>
 <script>
 const API = "https://gaia-api.earth-team.org";
 const log = document.getElementById("log");
 const inp = document.getElementById("input");
-let sid = "";
-let uid = "web-" + Math.random().toString(36).slice(2, 8);
+const sendBtn = document.getElementById("sendBtn");
+const stopBtn = document.getElementById("stopBtn");
+let sid = "", uid = "web-" + Math.random().toString(36).slice(2, 8), abort;
+
+function newChat(){sid="";log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits, or anything about protecting the planet.</p></div>'}
 
 document.getElementById("form").onsubmit = async (e) => {
   e.preventDefault();
   const m = inp.value.trim();
   if (!m) return;
-  inp.value = "";
+  inp.value = ""; inp.focus();
+  clearWelcome();
   add("user", m);
   const div = add("assistant", "");
+
+  abort = new AbortController();
+  sendBtn.style.display = "none";
+  stopBtn.style.display = "inline-block";
+  let think = "", visible = "";
 
   try {
     const r = await fetch(API + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: m, user_id: uid, session_id: sid || void 0 }),
+      signal: abort.signal,
     });
     sid = r.headers.get("X-Session-Id") || sid;
 
-    const isStream = r.headers.get("Content-Type")?.includes("text/event-stream");
-
-    let think = "", visible = "";
-
-    if (isStream) {
+    if (r.headers.get("Content-Type")?.includes("text/event-stream")) {
       div.innerHTML = "";
       const reader = r.body.getReader();
       const decoder = new TextDecoder();
@@ -92,10 +113,25 @@ document.getElementById("form").onsubmit = async (e) => {
     if (!div.innerHTML.trim()) div.innerHTML = "<em>(empty)</em>";
 
   } catch (x) {
-    div.innerHTML = "<em>Error: " + x.message + "</em>";
+    if (x.name === "AbortError") {
+      div.innerHTML = render(visible) || "<em>(stopped)</em>";
+      if (think.trim()) div.innerHTML = `<div class="think" onclick="this.classList.toggle('open')">\u{1F4AD} Show reasoning<span class="body">${think.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</span></div>` + div.innerHTML;
+    } else {
+      div.innerHTML = "<em>Error: " + x.message + "</em>";
+    }
   }
+  sendBtn.style.display = "";
+  stopBtn.style.display = "none";
+  abort = null;
   log.scrollTop = log.scrollHeight;
 };
+
+stopBtn.onclick = () => { if (abort) abort.abort(); };
+
+function clearWelcome() {
+  const w = log.querySelector(".welcome");
+  if (w) w.remove();
+}
 
 function splitThink(raw) {
   const think = [], visible = [];
@@ -113,11 +149,15 @@ function splitThink(raw) {
 }
 
 function render(text) {
-  return text
+  let html = text
     .replace(/</g, "&lt;")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\n/g, "<br>");
+    .replace(/\*(.+?)\*/g, "<em>$1</em>");
+  // Code blocks: ```code``` → <pre><code>code</code></pre>
+  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre><code>${code.replace(/&lt;/g,"<").replace(/&gt;/g,">")}</code></pre>`);
+  html = html.replace(/\n/g, "<br>");
+  return html;
 }
 
 function add(role, text) {

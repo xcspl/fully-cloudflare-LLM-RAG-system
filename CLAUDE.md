@@ -5,7 +5,7 @@ Three components: Chat Worker (API), Data Worker (ingest/search), CF Pages (UI).
 ## Architecture
 
 ```
-CF Pages (gaia-chat.pages.dev)
+CF Pages (gaia-chat.earth-team.org)
   └── static/index.html → fetch SSE → gaia-api.earth-team.org
 
 Chat Worker "gaia" (gaia-api.earth-team.org)  — API only

@@ -1,7 +1,14 @@
 export interface ToolCall {
-  id: string;
-  name: string;
-  arguments: string;
+  id?: string;
+  index?: number;
+  type?: string;
+  function?: {
+    name: string;
+    arguments: string;
+  };
+  // Convenience accessors (set by parseLlmResponse)
+  name?: string;
+  arguments?: string;
 }
 
 export interface ChatMessage {

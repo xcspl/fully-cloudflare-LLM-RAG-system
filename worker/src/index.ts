@@ -51,7 +51,25 @@ async function handleChat(request: Request, env: Env, ctx: ExecutionContext): Pr
 
   const session = await loadSession(env, body.user_id, body.session_id);
   const sysMsg = await selectSystemMessage(env, body.message);
-  const fallback = "You are gAIa, an AI assistant with access to a knowledge base via vector search.";
+  const fallback = "You are gAIa, the AI assistant for EarthTeam Alliance.";
+
+  // EarthTeam identity — always injected, never from RAG
+  const identity = `You are gAIa, the AI assistant for EarthTeam Alliance — a global coalition of 100+ frontline conservation organizations, scientists, and communities united under the Planetary Health approach. You help protect wildlife, preserve habitats, and reform agriculture.
+
+You ARE EarthTeam's AI. Use "we" and "our" when referring to EarthTeam. You know about:
+- EarthTeam's three pillars: Wildlife Protection, Habitat Protection, Regenerative Agriculture
+- EarthTeam's Solutions Map at map.earth-team.org
+- EarthTeam's learning platform at earth-team.org/lms
+- Earth Credits (EarthTeam Stars) — the reward system that gives planet protectors a "LIFT"
+- Freeland (www.freeland.org) — EarthTeam's host and anchor organization
+- The AI Oracle — the AI assistant for verifying conservation projects
+
+You have access to a knowledge base via vector search. Use the search_knowledge_base tool when you need more specific information.`;
+
+  // GMT time with key timezone references
+  const now = new Date();
+  const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
+  const temporal = `\n\n[Current time: ${gmt} | Year: ${now.getUTCFullYear()} | Month: ${now.toLocaleString("en-US", { month: "long", timeZone: "UTC" })}]`;
 
   const llmConfig = {
     gatewayToken: env.CF_AIG_TOKEN,
@@ -62,79 +80,72 @@ async function handleChat(request: Request, env: Env, ctx: ExecutionContext): Pr
     maxTokens: env.LLM_MAX_TOKENS ? parseInt(env.LLM_MAX_TOKENS) : undefined,
   };
 
+  // Combine identity + time + selected prompt (or fallback)
+  const systemContent = identity + temporal + "\n\n" + (sysMsg?.content ?? fallback);
+
+  // Filter history to only user + assistant messages (clean LLM context, no tool chatter)
+  const cleanHistory = session.messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-10);
+
   const messages: ChatMessage[] = [
-    { role: "system", content: sysMsg?.content ?? fallback },
-    ...session.messages.slice(-10),
+    { role: "system", content: systemContent },
+    ...cleanHistory,
     { role: "user", content: body.message },
   ];
 
-  // Tool loop: LLM decides to search or answer
+  // Tool loop: LLM decides to search or answer directly
   for (let i = 0; i < 3; i++) {
     const resp = await callLlm(llmConfig, messages, { stream: false, tools: ALL_TOOLS });
     if (!resp.ok) {
       const errText = await resp.text();
       return json({ error: `LLM error (round ${i}): ${resp.status} ${errText}` }, 502);
     }
-
     const parsed = parseLlmResponse(await resp.json() as Record<string, unknown>);
+    if (!parsed.toolCalls?.length) break; // LLM chose to answer
 
-    if (!parsed.toolCalls?.length) break; // no tools → proceed to final
-
-    const assistantMsg: ChatMessage = {
-      role: "assistant",
-      content: parsed.content ?? "",
-      tool_calls: parsed.toolCalls,
-    };
+    // Preserve full tool_call structure (Minimax requires index, type, function)
+    const assistantMsg: ChatMessage = { role: "assistant", content: parsed.content ?? "", tool_calls: parsed.toolCalls };
     messages.push(assistantMsg);
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const context = await searchViaDataWorker(env, args.query);
-        // Minimax doesn't support role: "tool" — inject results as user message
-        messages.push({
-          role: "user",
-          content: `[Tool result for: ${args.query}]\n${context || "No matching documents found."}`,
-        });
+        messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents found." });
       }
     }
   }
 
-  const wantStream = body.stream !== false; // default true
-  const usedTools = messages.some((m) => m.role === "user" && m.content?.startsWith("[Tool result"));
+  // Final streaming call (Minimax: stream without tools after tool messages)
+  const wantStream = body.stream !== false;
+  const usedTools = messages.some((m) => m.role === "tool");
 
-  // Streaming only works when no tool messages are present (Minimax limitation)
   if (wantStream && !usedTools) {
     const streamResp = await callLlm(llmConfig, messages, { stream: true });
     if (streamResp.ok) {
       session.messages = messages.filter((m) => m.role !== "system");
       ctx.waitUntil(saveSession(env, session));
       return new Response(streamResp.body, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "X-Session-Id": session.id,
-        },
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Session-Id": session.id },
       });
     }
-    // Fall through to non-streaming
   }
 
-  const finalResp = await callLlm(llmConfig, messages, { stream: false, tools: ALL_TOOLS });
-  if (!finalResp.ok) {
-    const errText = await finalResp.text();
-    return json({ error: `LLM error (final): ${finalResp.status} ${errText}` }, 502);
-  }
+  // Final call WITHOUT tools — LLM had its chance to search, now it must answer
+  const finalResp = await callLlm(llmConfig, messages, { stream: false });
+  if (!finalResp.ok) return json({ error: `LLM error: ${finalResp.status} ${await finalResp.text()}` }, 502);
 
   const finalData = await finalResp.json() as Record<string, unknown>;
   const reply = parseLlmResponse(finalData);
-
-  if (reply.content) {
-    messages.push({ role: "assistant", content: reply.content });
-  }
+  if (reply.content) messages.push({ role: "assistant", content: reply.content });
   session.messages = messages.filter((m) => m.role !== "system");
   ctx.waitUntil(saveSession(env, session));
+
+  if (!reply.content) {
+    const raw = JSON.stringify(finalData).slice(0, 300);
+    return json({ error: "Empty response from LLM", raw: raw }, 500);
+  }
 
   return json({ reply: reply.content, session_id: session.id });
 }

@@ -8,7 +8,7 @@ Three components, shared CF infra. All deployed.
 |-----------|-----|--------|
 | Chat Worker (`gaia`) | `gaia-api.earth-team.org` | Deployed |
 | Data Worker (`gaia-data`) | `gaia-data.sumanta-7a8.workers.dev` | Deployed |
-| Chat UI (Pages) | `master.gaia-chat.pages.dev` | Deployed |
+| Chat UI (Pages) | `gaia-chat.earth-team.org` | Deployed |
 | D1 | `gaia-db` | 4 tables |
 | Vectorize (docs) | `gaia-docs-bge-m3` | 1024d cosine |
 | Vectorize (chat) | `gaia-chat-summaries-bge-m3` | Created, unused |

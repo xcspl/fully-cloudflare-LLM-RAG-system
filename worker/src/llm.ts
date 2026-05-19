@@ -40,7 +40,6 @@ export async function callLlm(
 
   if (options.tools?.length) {
     body.tools = options.tools;
-    body.tool_choice = "auto";
   }
 
   if (options.maxTokens) {
@@ -71,11 +70,15 @@ export function parseLlmResponse(data: Record<string, unknown>): LlmResponse {
   const message = choice.message as Record<string, unknown> | undefined;
   const finishReason = (choice.finish_reason as string) ?? "error";
 
-  // Tool calls
+  // Tool calls — preserve full structure (Minimax needs index, type, function)
   const rawCalls = message?.tool_calls as Array<Record<string, unknown>> | undefined;
   if (rawCalls?.length) {
     const toolCalls: ToolCall[] = rawCalls.map((tc) => ({
       id: tc.id as string,
+      index: tc.index as number,
+      type: (tc.type as string) ?? "function",
+      function: tc.function as { name: string; arguments: string },
+      // Convenience
       name: (tc.function as Record<string, string>)?.name ?? "",
       arguments: (tc.function as Record<string, string>)?.arguments ?? "{}",
     }));
