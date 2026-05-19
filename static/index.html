@@ -52,6 +52,8 @@ document.getElementById("form").onsubmit = async (e) => {
 
     const isStream = r.headers.get("Content-Type")?.includes("text/event-stream");
 
+    let think = "", visible = "";
+
     if (isStream) {
       div.innerHTML = "";
       const reader = r.body.getReader();
@@ -71,33 +73,52 @@ document.getElementById("form").onsubmit = async (e) => {
             if (c) raw += c;
           } catch {}
         }
-        // Strip think blocks in-flight: only show content outside <think>
-        div.innerHTML = raw
-          .replace(/<think>[\s\S]*?<\/think>/g, "")
-          .replace(/<think>[\s\S]*$/, "") // unclosed think block
-          .replace(/</g, "&lt;")
-          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-          .replace(/\*(.+?)\*/g, "<em>$1</em>")
-          .replace(/\n/g, "<br>");
+        const parts = splitThink(raw);
+        think = parts.think; visible = parts.visible;
+        div.innerHTML = render(visible);
       }
-      if (!div.innerHTML.trim()) div.innerHTML = "<em>(empty)</em>";
     } else {
       const d = await r.json();
-      div.innerHTML = d.reply
-        ? d.reply
-            .replace(/<think>[\s\S]*?<\/think>/g, "")
-            .replace(/</g, "&lt;")
-            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-            .replace(/\*(.+?)\*/g, "<em>$1</em>")
-            .replace(/\n/g, "<br>")
-        : "<em>(no response)</em>";
+      if (d.reply) {
+        const parts = splitThink(d.reply);
+        think = parts.think; visible = parts.visible;
+      }
+      div.innerHTML = render(visible) || "<em>(no response)</em>";
     }
+
+    if (think.trim()) {
+      div.innerHTML = `<div class="think" onclick="this.classList.toggle('open')">\u{1F4AD} Show reasoning<span class="body">${think.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</span></div>` + div.innerHTML;
+    }
+    if (!div.innerHTML.trim()) div.innerHTML = "<em>(empty)</em>";
 
   } catch (x) {
     div.innerHTML = "<em>Error: " + x.message + "</em>";
   }
   log.scrollTop = log.scrollHeight;
 };
+
+function splitThink(raw) {
+  const think = [], visible = [];
+  let remaining = raw;
+  while (remaining.length) {
+    const start = remaining.indexOf("<think>");
+    if (start === -1) { visible.push(remaining); break; }
+    visible.push(remaining.slice(0, start));
+    const end = remaining.indexOf("</think>", start + 7);
+    if (end === -1) { think.push(remaining.slice(start + 7)); break; }
+    think.push(remaining.slice(start + 7, end));
+    remaining = remaining.slice(end + 8);
+  }
+  return { think: think.join(""), visible: visible.join("") };
+}
+
+function render(text) {
+  return text
+    .replace(/</g, "&lt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/\n/g, "<br>");
+}
 
 function add(role, text) {
   const d = document.createElement("div");
