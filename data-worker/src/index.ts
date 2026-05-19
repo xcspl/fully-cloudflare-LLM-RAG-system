@@ -83,18 +83,23 @@ async function handleIngest(request: Request, env: Env): Promise<Response> {
 // ── /search ──
 
 async function handleSearch(request: Request, env: Env): Promise<Response> {
-  let body: { query: string; topK?: number };
+  let body: { query: string; topK?: number; scoreThreshold?: number };
   try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
   if (!body.query) return json({ error: "query required" }, 400);
 
   try {
+    const threshold = body.scoreThreshold ?? 0.5;
     const aiResult = await env.AI.run(EMBEDDING_MODEL_ID, { text: body.query });
     const vector = Array.from((aiResult as { data: number[][] }).data[0]);
     const { matches } = await env.VECTORIZE.query(vector, { topK: body.topK ?? 5, returnMetadata: "all" });
     if (!matches?.length) return json({ results: [] });
 
-    const ids = (matches as Array<{ metadata?: { d1_row_id: string } }>)
-      .map((m) => m.metadata?.d1_row_id).filter(Boolean);
+    // Filter by score threshold
+    const filtered = (matches as Array<{ score: number; metadata?: { d1_row_id: string } }>)
+      .filter((m) => m.score >= threshold);
+    if (!filtered.length) return json({ results: [] });
+
+    const ids = filtered.map((m) => m.metadata?.d1_row_id).filter(Boolean);
     if (!ids.length) return json({ results: [] });
 
     const placeholders = ids.map(() => "?").join(",");
@@ -107,7 +112,7 @@ async function handleSearch(request: Request, env: Env): Promise<Response> {
       source: row.source,
       data: JSON.parse(row.data),
       embedding_model: row.embedding_model,
-      score: (matches as Array<{ score: number }>)[i]?.score,
+      score: filtered[i]?.score,
     }));
     return json({ results: resolved });
   } catch (e) { return json({ error: `Search failed: ${e}` }, 500); }

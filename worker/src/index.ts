@@ -143,7 +143,7 @@ async function searchViaDataWorker(env: Env, query: string): Promise<string> {
   const resp = await env.DATA_SERVICE.fetch("https://gaia-data/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, scoreThreshold: 0.5 }),
   });
 
   if (!resp.ok) return "";
