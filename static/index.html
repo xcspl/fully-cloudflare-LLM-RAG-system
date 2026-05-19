@@ -37,7 +37,7 @@ body{font:14px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;height:
 </style>
 </head>
 <body>
-<div id="log"><div class="welcome"><h1>gAIa</h1><p>EarthTeam's AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits, or anything about protecting the planet.</p></div></div>
+<div id="log"><div class="welcome"><h1>gAIa</h1><p>EarthTeam's AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div></div>
 <div id="footer">
 <div id="toolbar"><span onclick="newChat()">+ New chat</span><span class="fade">gAIa may make mistakes. Verify important info.</span></div>
 <form id="form"><input id="input" placeholder="Ask gAIa..." autofocus><button id="sendBtn">Send</button><button class="stop" id="stopBtn" type="button">Stop</button></form>
@@ -50,7 +50,7 @@ const sendBtn = document.getElementById("sendBtn");
 const stopBtn = document.getElementById("stopBtn");
 let sid = "", uid = "web-" + Math.random().toString(36).slice(2, 8), abort;
 
-function newChat(){sid="";log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits, or anything about protecting the planet.</p></div>'}
+function newChat(){sid="";log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div>'}
 
 document.getElementById("form").onsubmit = async (e) => {
   e.preventDefault();
