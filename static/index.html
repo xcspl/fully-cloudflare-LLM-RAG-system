@@ -56,7 +56,7 @@ document.getElementById("form").onsubmit = async (e) => {
       div.innerHTML = "";
       const reader = r.body.getReader();
       const decoder = new TextDecoder();
-      let buf = "";
+      let buf = "", raw = "";
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -68,16 +68,28 @@ document.getElementById("form").onsubmit = async (e) => {
           try {
             const j = JSON.parse(l.slice(6));
             const c = j.choices?.[0]?.delta?.content;
-            if (c) div.innerHTML += c;
+            if (c) raw += c;
           } catch {}
         }
+        // Strip think blocks in-flight: only show content outside <think>
+        div.innerHTML = raw
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .replace(/<think>[\s\S]*$/, "") // unclosed think block
+          .replace(/</g, "&lt;")
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*(.+?)\*/g, "<em>$1</em>")
+          .replace(/\n/g, "<br>");
       }
-      div.innerHTML = format(div.innerHTML);
       if (!div.innerHTML.trim()) div.innerHTML = "<em>(empty)</em>";
     } else {
       const d = await r.json();
       div.innerHTML = d.reply
-        ? format(d.reply)
+        ? d.reply
+            .replace(/<think>[\s\S]*?<\/think>/g, "")
+            .replace(/</g, "&lt;")
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*(.+?)\*/g, "<em>$1</em>")
+            .replace(/\n/g, "<br>")
         : "<em>(no response)</em>";
     }
 
@@ -95,17 +107,6 @@ function add(role, text) {
     : text.replace(/</g, "&lt;");
   log.appendChild(d);
   return d;
-}
-
-function format(text) {
-  return text
-    .replace(/<\/think>/g, "")
-    .replace(/<think>([\s\S]*?)<\/think>/g, (_, t) =>
-      `<span class="think" onclick="this.classList.toggle('open')">💭 Thinking...<span class="body">${t.replace(/</g,"&lt;")}</span></span>`)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/</g, "&lt;")
-    .replace(/\n/g, "<br>");
 }
 </script>
 </body>
