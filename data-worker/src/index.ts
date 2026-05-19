@@ -39,13 +39,14 @@ async function handleIngest(request: Request, env: Env): Promise<Response> {
   }
 
   try {
-    const id = crypto.randomUUID();
+    // Idempotent: use provided id/slug, or generate UUID. INSERT OR REPLACE = safe to re-run.
+    const id = body.slug || body.id || crypto.randomUUID();
     const now = new Date().toISOString();
 
-    // 1. D1 store
+    // 1. D1 store (upsert — re-running with same slug updates, not duplicates)
     const initial = { ...body.data, canonical: "" };
     await env.DB.prepare(
-      "INSERT INTO documents (id, source, data, embedding_model, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT OR REPLACE INTO documents (id, source, data, embedding_model, created_at) VALUES (?, ?, ?, ?, ?)",
     ).bind(id, body.source, JSON.stringify(initial), null, now).run();
 
     // 2. Extract key keys
