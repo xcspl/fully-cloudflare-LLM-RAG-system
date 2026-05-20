@@ -1,6 +1,6 @@
 # gAIa Chatbot Widget — Frontend Integration Guide
 
-API contract for building a chat UI on any framework (React, React Native, Vue, vanilla JS). Reference implementation: `static/index.html`.
+API contract for building a chat UI on any framework (React, React Native, Vue, vanilla JS). A working vanilla JS implementation exists — request it if you need reference code.
 
 ## Endpoint
 
@@ -165,7 +165,7 @@ function stripThink(text) {
 }
 ```
 
-See `static/index.html` for accumulating think content into a collapsible toggle.
+For a collapsible think toggle, request the reference implementation.
 
 ## Markdown
 
@@ -201,9 +201,9 @@ try {
 
 Common: `502` (AI Gateway/LLM failure), `400` (invalid body), network drops.
 
-## Reference impl
+## Reference implementation
 
-`static/index.html` — 140 lines, vanilla JS, full streaming, stop button, think toggle, session persistence.
+A working vanilla JS implementation exists with full streaming, stop button, think toggle, and session persistence. Request it if you need reference code.
 
 ## Quick reference
 
