@@ -47,8 +47,8 @@ async function handleChat(request: Request, env: Env, ctx: ExecutionContext): Pr
   try { body = await request.json(); } catch {
     return json({ error: "Invalid JSON" }, 400);
   }
-  if (!body.message || !body.user_id) {
-    return json({ error: "message and user_id are required" }, 400);
+  if (!body.message) {
+    return json({ error: "message is required" }, 400);
   }
 
   const session = await loadSession(env, body.user_id, body.session_id);
@@ -132,7 +132,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     const streamResp = await callLlm(llmConfig, messages, { stream: true });
     if (streamResp.ok) {
       ctx.waitUntil((async () => {
-        await saveChatMessages(env, session.id, body.user_id, messages.filter((m) => m.role !== "system"));
+        await saveChatMessages(env, session.id, (body.user_id || ""), messages.filter((m) => m.role !== "system"));
         await saveSession(env, session);
       })());
       return new Response(streamResp.body, {
@@ -149,7 +149,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   const reply = parseLlmResponse(finalData);
   if (reply.content) messages.push({ role: "assistant", content: reply.content });
   ctx.waitUntil((async () => {
-    await saveChatMessages(env, session.id, body.user_id, messages.filter((m) => m.role !== "system"));
+    await saveChatMessages(env, session.id, (body.user_id || ""), messages.filter((m) => m.role !== "system"));
     await saveSession(env, session);
   })());
 
