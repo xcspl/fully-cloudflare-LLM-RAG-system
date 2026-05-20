@@ -27,10 +27,11 @@ Ingestion:
 
 Chat:
   CF Pages (static/index.html) → Chat Worker (/chat)
-    → D1 (session load, system message select)
-    → Tool loop: LLM decides → search_knowledge_base → Data Worker (/search)
-    → Final LLM call → SSE stream or JSON response
-    → D1 (session save)
+    → D1 (session load, system message select, identity injection)
+    → Call 1: non-streaming tool check (LLM decides: search or answer?)
+    → If search: Data Worker (/search) → tool result → loop
+    → Call 2: streaming SSE (no tools) or JSON (tools used, Minimax limitation)
+    → D1 (session save, chat_messages insert)
 ```
 
 ## Key Files
