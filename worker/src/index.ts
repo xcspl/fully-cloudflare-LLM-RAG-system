@@ -118,21 +118,17 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
       if (tc.name === "search_knowledge_base") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const context = await searchViaDataWorker(env, args.query);
-        const toolContent = context || "No matching documents found.";
-        messages.push({ role: "tool", tool_call_id: tc.id, content: toolContent });
-        ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "tool", toolContent));
+        messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents found." });
       } else if (tc.name === "get_current_time") {
         const now = new Date();
         const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
         const timeContent = `Current time: ${gmt} | Year: ${now.getUTCFullYear()} | Month: ${now.toLocaleString("en-US", { month: "long", timeZone: "UTC" })}`;
         messages.push({ role: "tool", tool_call_id: tc.id, content: timeContent });
-        ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "tool", timeContent));
       } else if (tc.name === "search_chat_history") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const history = await searchChatHistory(env, session.id, args.query);
         const historyContent = history || "No matching past conversations found.";
         messages.push({ role: "tool", tool_call_id: tc.id, content: historyContent });
-        ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "tool", historyContent));
       }
     }
   }
