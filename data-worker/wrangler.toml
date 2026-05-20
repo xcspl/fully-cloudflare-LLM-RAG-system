@@ -1,7 +1,7 @@
 name = "gaia-data"
 main = "src/index.ts"
 compatibility_date = "2025-05-15"
-account_id = "{ACCOUNT_ID}"
+# account_id set via CLOUDFLARE_ACCOUNT_ID env var
 
 [[d1_databases]]
 binding = "DB"
