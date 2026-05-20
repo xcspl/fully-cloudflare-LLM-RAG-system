@@ -183,7 +183,8 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   const reply = parseLlmResponse(finalData);
   if (reply.content) messages.push({ role: "assistant", content: reply.content });
   if (reply.content) {
-    ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "assistant", reply.content));
+    const stripped = reply.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    if (stripped) ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "assistant", stripped));
   }
   ctx.waitUntil(saveSession(env, session));
 
