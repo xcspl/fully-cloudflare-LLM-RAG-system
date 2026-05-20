@@ -2,6 +2,8 @@
 
 Three components: Chat Worker (API), Data Worker (ingest/search), CF Pages (UI). Shared D1, AI Gateway, bge-m3.
 
+Subdir git repos: `cf-rag-crud-gui/` and `reference-impls/` are gitignored from this repo and have their own independent git repos. Always `cd` into them before running git commands.
+
 ## Architecture
 
 ```
