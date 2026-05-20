@@ -90,31 +90,57 @@ async function handleSearch(request: Request, env: Env): Promise<Response> {
   if (!body.query) return json({ error: "query required" }, 400);
 
   try {
-    const threshold = body.scoreThreshold ?? 0.5;
+    const topK = body.topK ?? 5;
+    const threshold = body.scoreThreshold ?? 0.3;
+    const RRF_K = 60;
+
+    // Arm 1: FTS5 keyword search
+    const ftsResults = await env.DB.prepare(
+      "SELECT rowid, rank FROM documents_fts WHERE documents_fts MATCH ? ORDER BY rank LIMIT ?",
+    ).bind(body.query, topK * 2).all<{ rowid: number; rank: number }>();
+
+    // Arm 2: Vectorize semantic search
     const aiResult = await env.AI.run(EMBEDDING_MODEL_ID, { text: body.query });
     const vector = Array.from((aiResult as { data: number[][] }).data[0]);
-    const { matches } = await env.VECTORIZE.query(vector, { topK: body.topK ?? 5, returnMetadata: "all" });
-    if (!matches?.length) return json({ results: [] });
+    const { matches } = await env.VECTORIZE.query(vector, { topK: topK * 2, returnMetadata: "all" });
+    const vecMatches = (matches as Array<{ score: number; metadata?: { d1_row_id: string } }>) ?? [];
 
-    // Filter by score threshold
-    const filtered = (matches as Array<{ score: number; metadata?: { d1_row_id: string } }>)
-      .filter((m) => m.score >= threshold);
-    if (!filtered.length) return json({ results: [] });
+    // Reciprocal Rank Fusion
+    const rrfScores = new Map<string, number>();
 
-    const ids = filtered.map((m) => m.metadata?.d1_row_id).filter(Boolean);
-    if (!ids.length) return json({ results: [] });
+    for (let i = 0; i < (ftsResults.results?.length ?? 0); i++) {
+      const docId = String(ftsResults.results![i].rowid);
+      rrfScores.set(docId, (rrfScores.get(docId) || 0) + 1 / (RRF_K + i + 1));
+    }
+    for (let i = 0; i < vecMatches.length; i++) {
+      const docId = vecMatches[i].metadata?.d1_row_id;
+      if (docId) {
+        rrfScores.set(docId, (rrfScores.get(docId) || 0) + 1 / (RRF_K + i + 1));
+      }
+    }
 
+    // Sort by RRF score, filter by threshold (normalize: 2 arms max RRF ≈ 0.033)
+    const ranked = [...rrfScores.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .filter(([, score]) => score >= threshold * 0.016)
+      .slice(0, topK);
+
+    if (!ranked.length) return json({ results: [] });
+
+    // Fetch from D1
+    const ids = ranked.map(([id]) => id);
     const placeholders = ids.map(() => "?").join(",");
     const { results } = await env.DB.prepare(
       `SELECT id, source, data, embedding_model FROM documents WHERE id IN (${placeholders})`,
     ).bind(...ids).all<{ id: string; source: string; data: string; embedding_model: string | null }>();
 
-    const resolved = (results ?? []).map((row, i) => ({
+    const scoreMap = new Map(ranked);
+    const resolved = (results ?? []).map((row) => ({
       id: row.id,
       source: row.source,
       data: JSON.parse(row.data),
       embedding_model: row.embedding_model,
-      score: filtered[i]?.score,
+      score: scoreMap.get(row.id) ?? 0,
     }));
     return json({ results: resolved });
   } catch (e) { return json({ error: `Search failed: ${e}` }, 500); }
