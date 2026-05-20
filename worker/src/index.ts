@@ -96,7 +96,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "user", body.message));
 
   // Tool loop: LLM decides to search or answer directly
-  for (let i = 0; i < 3; i++) {
+  toolLoop: for (let i = 0; i < 3; i++) {
     const resp = await callLlm(llmConfig, messages, { stream: false, tools: ALL_TOOLS });
     if (!resp.ok) {
       const errText = await resp.text();
@@ -118,7 +118,10 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
       if (tc.name === "search_knowledge_base") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const context = await searchViaDataWorker(env, args.query);
-        messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user." });
+        const result = context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user.";
+        messages.push({ role: "tool", tool_call_id: tc.id, content: result });
+        // If no results, break tool loop — don't let LLM retry endlessly
+        if (!context) break toolLoop;
       } else if (tc.name === "get_current_time") {
         const now = new Date();
         const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
