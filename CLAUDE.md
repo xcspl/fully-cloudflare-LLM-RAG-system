@@ -84,6 +84,12 @@ Secrets needed: `CF_AIG_TOKEN` on gaia and gaia-data Workers.
 - Inter-Worker calls: use Service Bindings, not `workers.dev` URLs
 - CORS: `Access-Control-Allow-Origin: *` on gaia Worker
 
+## Streaming mandate
+
+"Streaming" = SSE (Server-Sent Events) from the LLM through the AI Gateway, where tokens arrive word-by-word as `data:` lines. Non-streaming = `stream: false`, one JSON response with the full text.
+
+Non-streaming is a valid client option. But internally: if something breaks in streaming mode, fix it in streaming mode. Do not switch to non-streaming to avoid the problem. Streaming is the default and must work.
+
 ## What NOT to do
 
 - Don't hardcode domain knowledge or project names in code

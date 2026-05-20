@@ -143,9 +143,28 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
 
   if (wantStream && !usedTools) {
     const streamResp = await callLlm(llmConfig, messages, { stream: true });
-    if (streamResp.ok) {
+    if (streamResp.ok && streamResp.body) {
       ctx.waitUntil(saveSession(env, session));
-      return new Response(streamResp.body, {
+      const [clientStream, saveStream] = streamResp.body.tee();
+      ctx.waitUntil((async () => {
+        const reader = saveStream.getReader();
+        const decoder = new TextDecoder();
+        let raw = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          raw += decoder.decode(value, { stream: true });
+        }
+        const visible = raw.split("\n")
+          .filter((l) => l.startsWith("data: "))
+          .map((l) => { try { return JSON.parse(l.slice(6)).choices?.[0]?.delta?.content || ""; } catch { return ""; } })
+          .join("");
+        if (visible.trim()) {
+          const stripped = visible.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+          if (stripped) await saveMessage(env, session.id, (body.user_id || ""), "assistant", stripped);
+        }
+      })());
+      return new Response(clientStream, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Session-Id": session.id },
       });
     }
