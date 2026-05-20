@@ -45,7 +45,7 @@ export const SEARCH_CHAT_HISTORY: ToolDefinition = {
   function: {
     name: "search_chat_history",
     description:
-      "Search past conversation history for this user. Call this when the user references something discussed earlier or asks about previous conversations. Returns relevant past messages.",
+      "Search past conversation history for this user. Call this when the user references something discussed earlier or asks about previous conversations. Set search_all_sessions to true to search across all past sessions, not just the current one.",
     parameters: {
       type: "object",
       properties: {
@@ -53,6 +53,11 @@ export const SEARCH_CHAT_HISTORY: ToolDefinition = {
           type: "string",
           description:
             "Keywords or topic to search for in past conversations",
+        },
+        search_all_sessions: {
+          type: "boolean",
+          description:
+            "Set to true to search all past sessions for this user, not just the current conversation",
         },
       },
       required: ["query"],
