@@ -192,7 +192,14 @@ Show what the LLM is doing while the user waits. Use three word pools, cycle ran
 - **Searching**: `["Searching knowledge base…","Looking that up…","Finding information…","Consulting sources…","Fetching data…"]`
 - **Waiting**: `["Working on it…","Almost there…","Getting ready…","Hang tight…"]`
 
-Animate with an ellipsis after each word (CSS `::after` animation with `content: "" → "." → ".." → "..."`).
+Animate with an ellipsis after each word (CSS `::after` animation with `content: "" → "." → ".." → "..."`). Add a subtle pulse to the word itself — opacity and scale breathing:
+
+```css
+.status{animation:pulse 2s ease-in-out infinite}
+.status::after{content:'';animation:dots 1.5s steps(4,infinite);display:inline-block;width:1em}
+@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}100%{content:'...'}}
+@keyframes pulse{0%,100%{opacity:.6;transform:scale(.96)}50%{opacity:1;transform:scale(1)}}
+```
 
 ### State detection
 
