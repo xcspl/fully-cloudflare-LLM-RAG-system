@@ -9,7 +9,7 @@ Three components, shared CF infra. All deployed.
 | Chat Worker (`gaia`) | `gaia-api.earth-team.org` | Deployed |
 | Data Worker (`gaia-data`) | `gaia-data.sumanta-7a8.workers.dev` | Deployed |
 | Chat UI (Pages) | `gaia-chat.earth-team.org` | Deployed |
-| D1 | `gaia-db` | 4 tables |
+| D1 | `gaia-db` | 5 tables (documents, chat_summaries, sessions, system_messages, chat_messages) |
 | Vectorize (docs) | `gaia-docs-bge-m3` | 1024d cosine |
 | Vectorize (chat) | `gaia-chat-summaries-bge-m3` | Created, unused |
 | AI Gateway | `et-gaia` | custom-minimax, custom-deep2 |
@@ -43,9 +43,9 @@ Chat:
 | `cloudflare-findings.md` | Gotchas discovered |
 | `worker/src/index.ts` | Chat Worker: `/chat`, `/chat/history`, `/health` |
 | `worker/src/llm.ts` | LLM client via AI Gateway |
-| `worker/src/rag.ts` | Session persistence |
+| `worker/src/rag.ts` | Session persistence, chat_messages load/save |
 | `worker/src/system-messages.ts` | Keyword-triggered prompt selection |
-| `worker/src/tools.ts` | Tool definitions (search_knowledge_base) |
+| `worker/src/tools.ts` | 3 active tools + WEB_SEARCH stub |
 | `worker/src/types.ts` | Shared TypeScript types |
 | `data-worker/src/index.ts` | Data Worker: `/ingest`, `/search`, `/health` |
 | `static/index.html` | Chat UI (CF Pages) |
@@ -82,10 +82,13 @@ Chat:
 - [x] Vectorize indexes created
 - [x] Tool-based RAG working
 - [x] SSE streaming for simple queries, JSON for tool-based
-- [x] Session persistence (full conversation saved)
+- [x] Session persistence (chat_messages table, 50-item context)
 - [x] Chat UI on CF Pages with CORS
-- [x] EarthTeam data ingested (9 entries)
-- [x] Dedup slugs (idempotent ingestion)
+- [x] EarthTeam data: 9 entries
+- [x] Freeland data: 8 entries
+- [x] Earth Credits guide: 7 entries
+- [x] 3 LLM tools: RAG, time, chat history
+- [x] User profile compaction system designed
 - [ ] Chat-memory Worker deployed
 - [ ] Auth validation
 - [ ] Hybrid search (D1 FTS5 + Vectorize)

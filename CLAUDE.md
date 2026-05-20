@@ -9,7 +9,7 @@ CF Pages (gaia-chat.earth-team.org)
   └── static/index.html → fetch SSE → gaia-api.earth-team.org
 
 Chat Worker "gaia" (gaia-api.earth-team.org)  — API only
-  ├── D1 (sessions, system_messages)
+  ├── D1 (sessions, system_messages, chat_messages)
   ├── Data Worker: service binding (/search)
   │     └── Vectorize + D1 + bge-m3
   └── AI Gateway (et-gaia) → custom-minimax (chat) / custom-deep2 (canonical)
@@ -48,6 +48,18 @@ Slug = `MD5(source + JSON.stringify(data))` — auto-generated if not provided. 
 ## Vectorize metadata keys
 
 `canonical_text`, `d1_db_id`, `d1_row_id`, `external_url`, `user_id` (chat only), `embedding_model`
+
+## Tools (LLM-accessible)
+
+`search_knowledge_base` (Vectorize RAG), `get_current_time` (GMT), `search_chat_history` (D1 chat_messages). `WEB_SEARCH` commented out in tools.ts for later.
+
+## Session persistence
+
+`chat_messages` table — one row per item, 7 columns (id, session_id, user_id, role, content, metadata, created_at). 50 items loaded per request. Tool markers compacted: `[search: "query"]`. Think blocks stripped from saved assistant messages. Compactified before save, full results preserved.
+
+## Milestones
+
+`milestones/` dir. Filename: `<ISO-timestamp>-<title>.md`. Milestone commits must be isolated — commit any other changes first, then milestone in its own commit, then follow-up changes after. No mixed commits.
 
 ## Deploy
 
