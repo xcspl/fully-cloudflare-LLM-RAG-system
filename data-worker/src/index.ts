@@ -85,14 +85,23 @@ async function handleIngest(request: Request, env: Env): Promise<Response> {
 // ── /search ──
 
 async function handleSearch(request: Request, env: Env): Promise<Response> {
-  let body: { query: string; topK?: number; scoreThreshold?: number };
+  let body: { query: string; topK?: number; scoreThreshold?: number; tune?: string; count?: number };
   try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
   if (!body.query) return json({ error: "query required" }, 400);
 
   try {
-    const topK = body.topK ?? 5;
-    const threshold = body.scoreThreshold ?? 0.3;
-    const RRF_K = 60;
+    // Map tune to presets
+    const tune = body.tune || "normal";
+    const presets: Record<string, { topK: number; threshold: number; rrfK: number }> = {
+      sharp: { topK: 3, threshold: 0.6, rrfK: 30 },
+      normal: { topK: 5, threshold: 0.3, rrfK: 60 },
+      wide: { topK: 10, threshold: 0.1, rrfK: 120 },
+    };
+    const preset = presets[tune] || presets.normal;
+    const topK = body.topK ?? preset.topK;
+    const threshold = body.scoreThreshold ?? preset.threshold;
+    const RRF_K = preset.rrfK;
+    const resultCount = body.count ?? 5;
 
     // Arm 1: FTS5 keyword search
     const ftsResults = await env.DB.prepare(
@@ -119,11 +128,11 @@ async function handleSearch(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    // Sort by RRF score, filter by threshold (normalize: 2 arms max RRF ≈ 0.033)
+    // Sort by RRF score, filter by threshold
     const ranked = [...rrfScores.entries()]
       .sort((a, b) => b[1] - a[1])
       .filter(([, score]) => score >= threshold * 0.016)
-      .slice(0, topK);
+      .slice(0, resultCount);
 
     if (!ranked.length) return json({ results: [] });
 

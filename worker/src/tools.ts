@@ -12,7 +12,7 @@ export const SEARCH_KNOWLEDGE_BASE: ToolDefinition = {
   function: {
     name: "search_knowledge_base",
     description:
-      "Search the knowledge base for information relevant to the user's query. Call this when the user asks about specific topics, projects, data, or details that may exist in the knowledge base. Formulate a specific, keyword-rich search query.",
+      "Search the knowledge base (hybrid keyword + semantic). On the FIRST call for a topic, do NOT set tune or count — use defaults. If results seem insufficient: too many weak results → retry with tune='sharp' and lower count. Too few results → retry with tune='wide' and higher count. Formulate a specific, keyword-rich search query.",
     parameters: {
       type: "object",
       properties: {
@@ -20,6 +20,17 @@ export const SEARCH_KNOWLEDGE_BASE: ToolDefinition = {
           type: "string",
           description:
             "A specific search query with relevant keywords to find matching documents in the knowledge base",
+        },
+        tune: {
+          type: "string",
+          enum: ["sharp", "normal", "wide"],
+          description:
+            "Search quality mode. Do NOT set on first call. Use 'sharp' to tighten (fewer, more relevant), 'wide' to broaden (more, exploratory).",
+        },
+        count: {
+          type: "number",
+          description:
+            "How many results to return (default 5). Set higher with wide, lower with sharp.",
         },
       },
       required: ["query"],

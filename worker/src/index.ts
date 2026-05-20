@@ -135,8 +135,8 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
-        const args = JSON.parse(tc.arguments || "{}") as { query: string };
-        const context = await searchViaDataWorker(env, args.query);
+        const args = JSON.parse(tc.arguments || "{}") as { query: string; tune?: string; count?: number };
+        const context = await searchViaDataWorker(env, args.query, args.tune, args.count);
         const result = context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user.";
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
         await saveMessage(env, session.id, userId, "tool", `[Searched knowledge base: ${JSON.parse(tc.arguments || "{}").query || "unknown"}]`, { tool_call_id: tc.id });
@@ -214,11 +214,11 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   return json({ reply: reply.content, session_id: session.id, _debug: debug });
 }
 
-async function searchViaDataWorker(env: Env, query: string): Promise<string> {
+async function searchViaDataWorker(env: Env, query: string, tune?: string, count?: number): Promise<string> {
   const resp = await env.DATA_SERVICE.fetch("https://gaia-data/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, scoreThreshold: 0.5 }),
+    body: JSON.stringify({ query, tune: tune || "normal", count: count ?? 5 }),
   });
 
   if (!resp.ok) return "[Search error: Data Worker returned an error. Answer from your own knowledge.]";
