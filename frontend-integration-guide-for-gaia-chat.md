@@ -2,6 +2,8 @@
 
 API contract for building a chat UI on any framework (React, React Native, Vue, vanilla JS). A working vanilla JS implementation exists — request it if you need reference code.
 
+The API/backend runs on Cloudflare Workers. "Worker" in this guide means the Cloudflare Worker serving the chat API — your frontend just calls it over HTTPS. Nothing about your frontend infrastructure is prescribed.
+
 ## Endpoint
 
 ```
@@ -157,15 +159,16 @@ controller.abort();
 
 ## Think blocks
 
-Minimax M2.7 wraps CoT reasoning in `<think>...</think>`. Strip from display:
+Minimax M2.7 wraps CoT reasoning in `<think>...</think>`. You choose how to handle them:
 
-```javascript
-function stripThink(text) {
-  return text.replace(/<\/think>/g, "").replace(/<think>[\s\S]*?<\/think>/g, "");
-}
-```
+- **Strip** — remove entirely, user never sees them:
+  ```javascript
+  text.replace(/<\/think>/g, "").replace(/<think>[\s\S]*?<\/think>/g, "")
+  ```
+- **Toggle** — collapse behind a clickable "Show reasoning" (gAIa's approach)
+- **Ignore** — display inline (verbose, but transparent)
 
-For a collapsible think toggle, request the reference implementation.
+The tags arrive as raw text in the SSE stream and JSON response. Filter before rendering to DOM.
 
 ## Markdown
 
