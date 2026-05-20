@@ -9,7 +9,7 @@ POST https://gaia-api.earth-team.org/chat
 Content-Type: application/json
 ```
 
-CORS: `*`.
+CORS: `*` (temporary — will be locked to allowed origins). Native apps (Android/iOS) don't enforce CORS at all; this only matters for web.
 
 **About auth**: The gAIa Worker does NOT issue JWTs. It validates them. Your app's backend issues a JWT to the user. The frontend sends it to gAIa. gAIa calls your backend's `/verify` endpoint to check it. Today the Worker ignores it — but your frontend should send it now so you're ready when validation turns on.
 
