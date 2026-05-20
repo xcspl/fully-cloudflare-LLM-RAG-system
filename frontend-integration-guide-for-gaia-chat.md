@@ -11,6 +11,8 @@ Content-Type: application/json
 
 CORS: `*`.
 
+**About auth**: The gAIa Worker does NOT issue JWTs. It validates them. Your app's backend issues a JWT to the user. The frontend sends it to gAIa. gAIa calls your backend's `/verify` endpoint to check it. Today the Worker ignores it — but your frontend should send it now so you're ready when validation turns on.
+
 ## Request
 
 ```json
@@ -33,7 +35,7 @@ HTTP header:
 
 | Header | Required | Notes |
 |--------|----------|-------|
-| `Authorization: Bearer <jwt>` | **No** (optional) | Backend JWT for user auth. Send it now — Worker ignores it today, validates it tomorrow. Frontend must be ready |
+| `Authorization: Bearer <jwt>` | **No** (optional, future) | YOUR backend's JWT, not ours. The Worker will call your backend's `/verify` to validate it. Send it now so your frontend is ready — the Worker ignores it today |
 
 ## Response: SSE Streaming (`stream: true`, default)
 
@@ -211,7 +213,7 @@ Common: `502` (AI Gateway/LLM failure), `400` (invalid body), network drops.
 | Chat | `POST /chat` |
 | History | `GET /chat/history?user_id=X&session_id=Y` |
 | Health | `GET /health` |
-| Auth | JWT Bearer (optional, ignored today, validated tomorrow) |
+| Auth | `Authorization: Bearer <your-backend-jwt>` (optional, ignored today) |
 | SSE format | `data: {"choices":[{"delta":{"content":"..."}}]}` |
 | JSON format | `{"reply": "...", "session_id": "..."}` |
 | Session context | Last 50 items |
