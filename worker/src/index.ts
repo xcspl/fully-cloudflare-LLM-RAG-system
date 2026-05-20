@@ -110,10 +110,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     // Preserve full tool_call structure (Minimax requires index, type, function)
     const assistantMsg: ChatMessage = { role: "assistant", content: parsed.content ?? "", tool_calls: parsed.toolCalls };
     messages.push(assistantMsg);
-    const q = parsed.toolCalls.map((tc) => {
-      try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
-    }).filter(Boolean).join(", ") || "unknown";
-    await saveMessage(env, session.id, userId, "tool", `[Searched knowledge base: ${q}]`);
+    await saveMessage(env, session.id, userId, "assistant", "", { tool_calls: parsed.toolCalls });
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
@@ -121,6 +118,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
         const context = await searchViaDataWorker(env, args.query);
         const result = context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user.";
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
+        await saveMessage(env, session.id, userId, "tool", `[Searched knowledge base: ${JSON.parse(tc.arguments || "{}").query || "unknown"}]`, { tool_call_id: tc.id });
         // If no results, break tool loop — don't let LLM retry endlessly
         if (!context) break toolLoop;
       } else if (tc.name === "get_current_time") {

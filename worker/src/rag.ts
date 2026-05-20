@@ -41,9 +41,14 @@ export async function loadChatHistory(
 
   if (!results?.length) return [];
   return results.reverse().map((r) => {
-    // Tool markers become user notes — not protocol messages
-    const role = r.role === "tool" ? "user" : r.role;
-    const msg: ChatMessage = { role: role as ChatMessage["role"], content: r.content };
+    const msg: ChatMessage = { role: r.role as ChatMessage["role"], content: r.content };
+    if (r.metadata) {
+      try {
+        const meta = JSON.parse(r.metadata);
+        if (meta.tool_calls) msg.tool_calls = meta.tool_calls;
+        if (meta.tool_call_id) msg.tool_call_id = meta.tool_call_id;
+      } catch {}
+    }
     return msg;
   });
 }
