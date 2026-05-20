@@ -100,7 +100,8 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     const resp = await callLlm(llmConfig, messages, { stream: false, tools: ALL_TOOLS });
     if (!resp.ok) {
       const errText = await resp.text();
-      return json({ error: `LLM error (round ${i}): ${resp.status} ${errText}` }, 502);
+      console.error(`[gAIa] Tool round ${i} failed: ${resp.status} ${errText}`);
+      return json({ error: `LLM error (round ${i}/${3}): ${resp.status} ${errText}` }, 502);
     }
     const parsed = parseLlmResponse(await resp.json() as Record<string, unknown>);
     if (!parsed.toolCalls?.length) break; // LLM chose to answer
@@ -139,6 +140,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   // Final streaming call (Minimax: stream without tools after tool messages)
   const wantStream = body.stream !== false;
   const usedTools = messages.some((m) => m.role === "tool");
+  const msgCount = messages.length;
 
   if (wantStream && !usedTools) {
     const streamResp = await callLlm(llmConfig, messages, { stream: true });
@@ -169,9 +171,13 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     }
   }
 
-  // Final call WITHOUT tools — LLM had its chance to search, now it must answer
-  const finalResp = await callLlm(llmConfig, messages, { stream: false });
-  if (!finalResp.ok) return json({ error: `LLM error: ${finalResp.status} ${await finalResp.text()}` }, 502);
+  // Final call — include tools if they were used (Minimax requires this)
+  const finalResp = await callLlm(llmConfig, messages, { stream: false, tools: usedTools ? ALL_TOOLS : undefined });
+  if (!finalResp.ok) {
+    const errText = await finalResp.text();
+    console.error(`[gAIa] Final call failed: ${finalResp.status} ${errText} (tools=${usedTools}, msgs=${msgCount})`);
+    return json({ error: `LLM error (final, tools=${usedTools}, msgs=${msgCount}): ${finalResp.status} ${errText}` }, 502);
+  }
 
   const finalData = await finalResp.json() as Record<string, unknown>;
   const reply = parseLlmResponse(finalData);
@@ -181,12 +187,13 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   }
   ctx.waitUntil(saveSession(env, session));
 
+  const debug = `${msgCount} msgs, tools=${usedTools}, stream=${wantStream}`;
   if (!reply.content) {
-    const raw = JSON.stringify(finalData).slice(0, 300);
-    return json({ error: "Empty response from LLM", raw: raw }, 500);
+    console.error(`[gAIa] Empty LLM response (${debug})`);
+    return json({ error: `Empty LLM response (${debug})` }, 502);
   }
 
-  return json({ reply: reply.content, session_id: session.id });
+  return json({ reply: reply.content, session_id: session.id, _debug: debug });
 }
 
 async function searchViaDataWorker(env: Env, query: string): Promise<string> {

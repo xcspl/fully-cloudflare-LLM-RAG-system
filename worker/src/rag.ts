@@ -35,8 +35,9 @@ export async function loadChatHistory(
   session_id: string,
   limit: number = 50,
 ): Promise<ChatMessage[]> {
+  // Only user + assistant messages for context (skip tool markers and results)
   const { results } = await env.DB.prepare(
-    "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
+    "SELECT role, content FROM chat_messages WHERE session_id = ? AND role IN ('user', 'assistant') ORDER BY created_at DESC LIMIT ?",
   ).bind(session_id, limit).all<{ role: string; content: string }>();
 
   if (!results?.length) return [];
