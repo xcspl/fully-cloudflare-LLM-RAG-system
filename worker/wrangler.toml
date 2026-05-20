@@ -1,7 +1,7 @@
 name = "gaia"
 main = "src/index.ts"
 compatibility_date = "2025-05-15"
-account_id = "{ACCOUNT_ID}"
+# account_id set via CLOUDFLARE_ACCOUNT_ID env var
 
 [[d1_databases]]
 binding = "DB"
@@ -16,8 +16,5 @@ service = "gaia-data"
 enabled = true
 
 [vars]
-LLM_BASE_URL = "https://gateway.ai.cloudflare.com/v1/{ACCOUNT_ID}/et-gaia"
-LLM_PROVIDER = "custom-minimax"
-LLM_MODEL = "MiniMax-M2.7"
-LLM_API_MODE = "openai"
-LLM_MAX_TOKENS = "4096"
+# LLM vars come from .env or wrangler secret
+# LLM_BASE_URL, LLM_PROVIDER, LLM_MODEL, LLM_API_MODE, LLM_MAX_TOKENS
