@@ -15,7 +15,7 @@
 
 ## Soon
 
-- [ ] **User profile table**: Compacted summary of user's chat history — key topics, preferences, frequently discussed subjects. Updated by merging current session chats + previously compacted profile → new compacted profile. If frontend sends `user_id` and a profile exists, injected into system prompt automatically. Gives LLM instant awareness of who it's talking to.
+- [ ] **User profile table**: Compacted summary of user's chat history — key topics, preferences, frequently discussed subjects. Trigger: when user starts a new session (no existing session_id for that user), Worker background-compacts last session + previous profile → new profile. Injected into system prompt automatically on next request. Gives LLM instant awareness of who it's talking to.
 - [ ] **Auth validation**: Frontend sends JWT + username → Worker caches 5 min TTL → POST /verify to backend. Cache hit = proceed. Cache miss/deny = blacklist.
 
 - [ ] **Auth validation**: Frontend sends JWT + username → Worker caches 5 min TTL → POST /verify to backend. Cache hit = proceed. Cache miss/deny = blacklist.
