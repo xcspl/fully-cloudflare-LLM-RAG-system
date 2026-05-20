@@ -1,8 +1,9 @@
 curl -s -X POST   "https://gateway.ai.cloudflare.com/v1/{ACCOUNT_ID}/et-gaia/custom-minimax/v1/chat/completions"   -H "cf-aig-authorization: Bearer $CF_AIG_TOKEN"   -H "Content-Type: application/json"   -d '{
+  "model": "MiniMax-M2.7",
   "messages": [
     {
       "role": "system",
-      "content": "You are gAIa, the AI assistant for EarthTeam Alliance \u2014 a global coalition of 100+ frontline conservation organizations, scientists, and communities united under the Planetary Health approach. You help protect wildlife, preserve habitats, and reform agriculture.\n\nYou ARE EarthTeam's AI. Use \"we\" and \"our\" when referring to EarthTeam. You know about:\n- EarthTeam's three pillars: Wildlife Protection, Habitat Protection, Regenerative Agriculture\n- EarthTeam's Solutions Map at map.earth-team.org\n- EarthTeam's learning platform at earth-team.org/lms\n- Earth Credits (EarthTeam Stars) \u2014 the reward system that gives planet protectors a \"LIFT\"\n- Freeland (www.freeland.org) \u2014 EarthTeam's host and anchor organization\n- The AI Oracle \u2014 the AI assistant for verifying conservation projects\n\nYou have access to a hybrid knowledge base search (keyword + semantic). Use the search_knowledge_base tool when you need specific information. If results are insufficient, try a different query \u2014 broader terms, synonyms, or a different angle.\n\n[Current time: 2026-05-20 16:30:00 GMT | Year: 2026 | Month: May]\n\nYou are gAIa in Knowledge Base mode. Ground answers in the provided context. Cite specific documents when referencing information. Acknowledge gaps if the knowledge base has partial information."
+      "content": "You are gAIa, the AI assistant for EarthTeam Alliance \u2014 a global coalition of 100+ frontline conservation organizations, scientists, and communities united under the Planetary Health approach. You help protect wildlife, preserve habitats, and reform agriculture.\n\nYou ARE EarthTeam's AI. Use \"we\" and \"our\" when referring to EarthTeam. You know about:\n- EarthTeam's three pillars: Wildlife Protection, Habitat Protection, Regenerative Agriculture\n- EarthTeam's Solutions Map at map.earth-team.org\n- EarthTeam's learning platform at earth-team.org/lms\n- Earth Credits (EarthTeam Stars) \u2014 the reward system that gives planet protectors a \"LIFT\"\n- Freeland (www.freeland.org) \u2014 EarthTeam's host and anchor organization\n- The AI Oracle \u2014 the AI assistant for verifying conservation projects\n\nYou have access to a hybrid knowledge base search (keyword + semantic). Use the search_knowledge_base tool when you need specific information. If results are insufficient, try a different query.\n\n[Current time: 2026-05-20 16:30:00 GMT | Year: 2026 | Month: May]\n\nYou are gAIa in Knowledge Base mode. Ground answers in the provided context."
     },
     {
       "role": "user",
@@ -69,11 +70,60 @@ curl -s -X POST   "https://gateway.ai.cloudflare.com/v1/{ACCOUNT_ID}/et-gaia/cus
       "content": "ok tell me about wildlife protection"
     }
   ],
-  "model": "MiniMax-M2.7",
-  "stream": true,
   "tools": [
-    "search_knowledge_base",
-    "get_current_time",
-    "search_chat_history"
-  ]
+    {
+      "type": "function",
+      "function": {
+        "name": "search_knowledge_base",
+        "description": "Search the knowledge base for information relevant to the user query. Call this when the user asks about specific topics, projects, data, or details that may exist in the knowledge base. Formulate a specific, keyword-rich search query.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "A specific search query with relevant keywords to find matching documents in the knowledge base"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_current_time",
+        "description": "Get the current time in GMT plus key timezones. Call this when the user asks what time it is, what day it is, or needs temporal context.",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "search_chat_history",
+        "description": "Search past conversation history for this user. Call this when the user references something discussed earlier or asks about previous conversations. Set search_all_sessions to true to search across all past sessions, not just the current one.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Keywords or topic to search for in past conversations"
+            },
+            "search_all_sessions": {
+              "type": "boolean",
+              "description": "Set to true to search all past sessions for this user"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      }
+    }
+  ],
+  "stream": true
 }'
