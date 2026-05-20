@@ -17,6 +17,8 @@ CORS: `*` (temporary — will be locked to allowed origins). Native apps (Androi
 
 ## Request
 
+The request body MUST be JSON. The `Content-Type: application/json` header is required — the Worker rejects requests without it.
+
 ```json
 {
   "message": "What is Earth Credits?",
@@ -41,7 +43,9 @@ HTTP header:
 
 ## Response: SSE Streaming (`stream: true`, default)
 
-When no tool search is needed. Content-Type: `text/event-stream`.
+The Worker uses this path when the LLM answers directly (no knowledge-base search). Content-Type: `text/event-stream`.
+
+**Important**: Do not assume the response type. Always check `Content-Type` (see below). The Worker may return JSON instead if the LLM performed a knowledge-base search.
 
 ```
 data: {"id":"...","choices":[{"delta":{"content":"Hello"}}]}
@@ -73,15 +77,15 @@ while (true) {
     try {
       const json = JSON.parse(line.slice(6));
       const content = json.choices?.[0]?.delta?.content;
-      if (content) appendToUI(content);
+      if (content) { /* render content in your UI — this is incremental, not replace */ }
     } catch {}
   }
 }
 ```
 
-## Response: JSON (`stream: false`, or tool-based)
+## Response: JSON
 
-When tool search fires, the Worker returns JSON (Minimax streaming limitation with tool messages).
+The Worker uses this path when the LLM performed a knowledge-base search (backend limitation prevents streaming after tool use). Also used when the client explicitly sets `"stream": false`. Content-Type: `application/json`.
 
 ```json
 HTTP 200
@@ -132,28 +136,34 @@ if (id) sessionId = id;
 // New chat button → reset sessionId = ""
 ```
 
-Worker loads last 50 messages from the session as LLM context. History persists across browser sessions via `session_id`.
+Worker loads the last 50 messages of a session as LLM context. History is stored server-side — your client persists it by saving and reusing the `session_id`. If `session_id` is lost, past sessions for the same `user_id` can be retrieved via `GET /chat/history?user_id=X`.
 
 ## Stop / Cancel
 
 ```javascript
-const controller = new AbortController();
+let controller = null;
 
-fetch("https://gaia-api.earth-team.org/chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message, user_id: userId, session_id: sessionId }),
-  signal: controller.signal,
-});
-
-// Stop button:
-controller.abort();
-
-// Catch:
-} catch (err) {
-  if (err.name === "AbortError") {
-    // Keep whatever streamed so far
+async function sendMessage(text) {
+  controller = new AbortController();
+  try {
+    const response = await fetch("https://gaia-api.earth-team.org/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, user_id: userId, session_id: sessionId }),
+      signal: controller.signal,
+    });
+    // ... handle response ...
+  } catch (err) {
+    if (err.name === "AbortError") {
+      // Request was cancelled — keep whatever streamed so far
+    } else {
+      // Network or other error
+    }
   }
+}
+
+function onStopClick() {
+  if (controller) controller.abort();
 }
 ```
 
