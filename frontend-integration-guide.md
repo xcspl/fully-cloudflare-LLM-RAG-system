@@ -9,7 +9,7 @@ POST https://gaia-api.earth-team.org/chat
 Content-Type: application/json
 ```
 
-No auth required today (future: JWT `Authorization` header). CORS: `*`.
+CORS: `*`.
 
 ## Request
 
@@ -28,6 +28,12 @@ No auth required today (future: JWT `Authorization` header). CORS: `*`.
 | `user_id` | Yes | — | Per-user identifier. Guest: `"web-" + random`. Persist across sessions |
 | `session_id` | Yes | — | Per-conversation identifier. Created on first message, reused for continuity |
 | `stream` | No | `true` | `true` = SSE streaming, `false` = JSON |
+
+HTTP header:
+
+| Header | Required | Notes |
+|--------|----------|-------|
+| `Authorization: Bearer <jwt>` | **No** (optional) | Backend JWT for user auth. Send it now — Worker ignores it today, validates it tomorrow. Frontend must be ready |
 
 ## Response: SSE Streaming (`stream: true`, default)
 
@@ -205,7 +211,7 @@ Common: `502` (AI Gateway/LLM failure), `400` (invalid body), network drops.
 | Chat | `POST /chat` |
 | History | `GET /chat/history?user_id=X&session_id=Y` |
 | Health | `GET /health` |
-| Auth | None today (future: JWT Bearer) |
+| Auth | JWT Bearer (optional, ignored today, validated tomorrow) |
 | SSE format | `data: {"choices":[{"delta":{"content":"..."}}]}` |
 | JSON format | `{"reply": "...", "session_id": "..."}` |
 | Session context | Last 50 items |
