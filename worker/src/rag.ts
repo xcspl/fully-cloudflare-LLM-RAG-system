@@ -1,4 +1,4 @@
-import type { Session } from "./types";
+import type { Session, ChatMessage } from "./types";
 
 export interface Env {
   DB: D1Database;
@@ -8,7 +8,7 @@ export interface Env {
   LLM_MODEL: string;
   LLM_API_MODE: string;
   LLM_MAX_TOKENS?: string;
-  DATA_SERVICE: Fetcher;  // Service binding to gaia-data
+  DATA_SERVICE: Fetcher;
 }
 
 export async function loadSession(
@@ -16,44 +16,81 @@ export async function loadSession(
   user_id: string,
   session_id?: string,
 ): Promise<Session> {
+  const id = session_id || crypto.randomUUID();
+
   if (session_id) {
     const row = await env.DB.prepare(
       "SELECT * FROM sessions WHERE id = ? AND user_id = ?",
-    )
-      .bind(session_id, user_id)
-      .first<Session>();
-
-    if (row) {
-      row.messages = JSON.parse(row.messages as unknown as string);
-      return row;
-    }
+    ).bind(session_id, user_id).first<Session>();
+    if (row) return row;
   }
 
-  const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  return {
-    id,
-    user_id,
-    messages: [],
-    created_at: now,
-    updated_at: now,
-  };
+  await env.DB.prepare(
+    "INSERT INTO sessions (id, user_id, messages, created_at, updated_at) VALUES (?, ?, '[]', ?, ?)",
+  ).bind(id, user_id, now, now).run();
+
+  return { id, user_id, messages: [], created_at: now, updated_at: now };
+}
+
+// Load last N messages from chat_messages table
+export async function loadChatHistory(
+  env: Env,
+  session_id: string,
+  limit: number = 50,
+): Promise<ChatMessage[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
+  ).bind(session_id, limit).all<{ role: string; content: string }>();
+
+  if (!results?.length) return [];
+  return results.reverse().map((r) => ({
+    role: r.role as ChatMessage["role"],
+    content: r.content,
+  }));
+}
+
+// Save each message as a row in chat_messages
+export async function saveChatMessages(
+  env: Env,
+  session_id: string,
+  user_id: string,
+  messages: ChatMessage[],
+): Promise<void> {
+  // Compactify assistant(tool_calls) → [search: "query"] markers before saving
+  const compact = messages.map((m) => {
+    if (m.role === "assistant" && m.tool_calls?.length) {
+      const query = m.tool_calls.map((tc) => {
+        try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
+      }).filter(Boolean).join(", ");
+      return { ...m, content: `[search: ${query}]`, tool_calls: undefined };
+    }
+    // Strip think blocks from assistant messages
+    if (m.role === "assistant" && m.content) {
+      const stripped = m.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      return { ...m, content: stripped || m.content };
+    }
+    return m;
+  });
+
+  const now = new Date().toISOString();
+  const stmt = env.DB.prepare(
+    "INSERT INTO chat_messages (id, session_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+
+  const batch: D1PreparedStatement[] = [];
+  for (const m of compact) {
+    batch.push(stmt.bind(crypto.randomUUID(), session_id, user_id, m.role, m.content.slice(0, 10000), now));
+  }
+
+  // Execute in chunks of 10 (D1 batch limit)
+  for (let i = 0; i < batch.length; i += 10) {
+    await env.DB.batch(batch.slice(i, i + 10));
+  }
 }
 
 export async function saveSession(env: Env, session: Session): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO sessions (id, user_id, messages, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       messages = excluded.messages,
-       updated_at = excluded.updated_at`,
-  )
-    .bind(
-      session.id,
-      session.user_id,
-      JSON.stringify(session.messages),
-      session.created_at,
-      new Date().toISOString(),
-    )
-    .run();
+    `UPDATE sessions SET updated_at = ? WHERE id = ?`,
+  ).bind(new Date().toISOString(), session.id).run();
 }

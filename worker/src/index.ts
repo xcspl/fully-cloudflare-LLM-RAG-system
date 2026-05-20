@@ -3,6 +3,8 @@ import {
   type Env,
   loadSession,
   saveSession,
+  loadChatHistory,
+  saveChatMessages,
 } from "./rag";
 import { callLlm, parseLlmResponse } from "./llm";
 import { selectSystemMessage } from "./system-messages";
@@ -83,7 +85,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   // Combine identity + time + selected prompt (or fallback)
   const systemContent = identity + temporal + "\n\n" + (sysMsg?.content ?? fallback);
 
-  const cleanHistory = session.messages.slice(-50);
+  const cleanHistory = await loadChatHistory(env, session.id, 50);
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemContent },
@@ -110,6 +112,14 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
         const args = JSON.parse(tc.arguments) as { query: string };
         const context = await searchViaDataWorker(env, args.query);
         messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents found." });
+      } else if (tc.name === "get_current_time") {
+        const now = new Date();
+        const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
+        messages.push({ role: "tool", tool_call_id: tc.id, content: `Current time: ${gmt} | Year: ${now.getUTCFullYear()} | Month: ${now.toLocaleString("en-US", { month: "long", timeZone: "UTC" })}` });
+      } else if (tc.name === "search_chat_history") {
+        const args = JSON.parse(tc.arguments) as { query: string };
+        const history = await searchChatHistory(env, session.id, args.query);
+        messages.push({ role: "tool", tool_call_id: tc.id, content: history || "No matching past conversations found." });
       }
     }
   }
@@ -121,8 +131,10 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   if (wantStream && !usedTools) {
     const streamResp = await callLlm(llmConfig, messages, { stream: true });
     if (streamResp.ok) {
-      session.messages = messages.filter((m) => m.role !== "system");
-      ctx.waitUntil(saveSession(env, session));
+      ctx.waitUntil((async () => {
+        await saveChatMessages(env, session.id, body.user_id, messages.filter((m) => m.role !== "system"));
+        await saveSession(env, session);
+      })());
       return new Response(streamResp.body, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Session-Id": session.id },
       });
@@ -136,8 +148,10 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   const finalData = await finalResp.json() as Record<string, unknown>;
   const reply = parseLlmResponse(finalData);
   if (reply.content) messages.push({ role: "assistant", content: reply.content });
-  session.messages = messages.filter((m) => m.role !== "system");
-  ctx.waitUntil(saveSession(env, session));
+  ctx.waitUntil((async () => {
+    await saveChatMessages(env, session.id, body.user_id, messages.filter((m) => m.role !== "system"));
+    await saveSession(env, session);
+  })());
 
   if (!reply.content) {
     const raw = JSON.stringify(finalData).slice(0, 300);
@@ -165,6 +179,18 @@ async function searchViaDataWorker(env: Env, query: string): Promise<string> {
   return results
     .map((r) => `## Source: ${r.data.title ?? "Untitled"} (relevance: ${r.score.toFixed(2)})\n${r.data.canonical ?? JSON.stringify(r.data)}`)
     .join("\n\n");
+}
+
+async function searchChatHistory(env: Env, session_id: string, query: string): Promise<string> {
+  const rows = await env.DB.prepare(
+    "SELECT role, content, created_at FROM chat_messages WHERE session_id = ? AND content LIKE ? ORDER BY created_at DESC LIMIT 20",
+  ).bind(session_id, `%${query}%`).all<{ role: string; content: string; created_at: string }>();
+
+  if (!rows.results?.length) return "";
+
+  return rows.results
+    .map((r) => `[${r.role} at ${r.created_at}]\n${r.content}`)
+    .join("\n\n---\n\n");
 }
 
 async function handleHistory(request: Request, env: Env): Promise<Response> {
