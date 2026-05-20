@@ -27,6 +27,9 @@
 
 ## Later
 
+- [ ] **Search chaining & query expansion**: LLM can request a wider search using found terms, related words, or looser RRF-k. Like "search again with related terms" or "broaden the search." Follow-up searches feed into each other.
+- [ ] **Web search tool**: Uncomment `WEB_SEARCH` in tools.ts and implement handler (needs API subscription)
+
 - [ ] **Web search tool**: Uncomment `WEB_SEARCH` in tools.ts and implement handler (needs API subscription)
 - [ ] **Tool-based RAG with streaming**: Solve Minimax streaming + tools limitation
 - [x] **Hybrid search**: D1 FTS5 + Vectorize merged via Reciprocal Rank Fusion
