@@ -29,7 +29,7 @@
 
 - [ ] **Web search tool**: Uncomment `WEB_SEARCH` in tools.ts and implement handler (needs API subscription)
 - [ ] **Tool-based RAG with streaming**: Solve Minimax streaming + tools limitation
-- [ ] **Hybrid search**: D1 FTS5 + Vectorize merged via Reciprocal Rank Fusion
+- [x] **Hybrid search**: D1 FTS5 + Vectorize merged via Reciprocal Rank Fusion
 - [ ] **Multi-embedding support**: Second `embeddings-*` column on documents
 - [ ] **db_ref resolution**: Execute D1 queries for linked data entries
 - [ ] **url_ref resolution**: Fetch external URLs at query time
