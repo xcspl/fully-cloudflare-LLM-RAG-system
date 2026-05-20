@@ -2,6 +2,16 @@
 
 Gotchas and discoveries during gAIa implementation.
 
+## Context Poisoning: The 502 Spiral
+
+**Root cause**: Two interacting bugs that took 3 days to isolate.
+
+1. **Empty tool results kill Minimax**: When `searchViaDataWorker` returns `""` (no results, fetch error), Minimax receives `{role: "tool", content: ""}` and rejects the entire request with 502. **Fix**: always return valid text — `"[Search returned no results. Answer from your own knowledge.]"`.
+
+2. **Protocol messages in context**: Saving `role: "tool"` messages to chat_messages and loading them as context injects bare tool protocol messages without their paired `assistant(tool_calls)`. Minimax expects tool messages to follow assistant(tool_calls) — orphaned tool messages break subsequent requests. **Fix**: convert `role: "tool"` → `role: "user"` when loading context. They become inline conversation notes, not protocol messages.
+
+**The rule**: DB tracks everything. Context reads tool markers as user notes. Never smuggle protocol messages into history.
+
 ## Minimax M2.7 Tool Calling
 
 - **Must preserve full tool_call structure**: `{ id, index, type, function: { name, arguments } }`. Dropping `index` or flattening `function` causes `choices: null`.
