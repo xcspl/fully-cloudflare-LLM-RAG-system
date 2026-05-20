@@ -180,6 +180,77 @@ Minimax M2.7 wraps CoT reasoning in `<think>...</think>`. You choose how to hand
 
 The tags arrive as raw text in the SSE stream and JSON response. Filter before rendering to DOM.
 
+## Streaming UX patterns
+
+Implement these for a polished chat experience. See the reference implementation for working vanilla JS examples.
+
+### Status indicators
+
+Show what the LLM is doing while the user waits. Use three word pools, cycle randomly every 2 seconds:
+
+- **Thinking**: `["Thinking…","Analyzing…","Processing…","Reasoning…","Contemplating…"]`
+- **Searching**: `["Searching knowledge base…","Looking that up…","Finding information…","Consulting sources…","Fetching data…"]`
+- **Waiting**: `["Working on it…","Almost there…","Getting ready…","Hang tight…"]`
+
+Animate with an ellipsis after each word (CSS `::after` animation with `content: "" → "." → ".." → "..."`).
+
+### State detection
+
+Detect LLM state from the SSE stream content:
+
+| State | Trigger | Status to show |
+|-------|---------|----------------|
+| **Thinking** | Raw text contains `<think>` but visible text is empty | Thinking pool |
+| **Responding** | Visible text has content | Show words as they arrive |
+| **Searching** | Stream aborted (reader cancelled), JSON response follows | Searching pool |
+| **Waiting** | Between requests (idle) | Waiting pool |
+
+### Word-by-word streaming
+
+Do NOT buffer the entire response before displaying. Append each `delta.content` chunk to the visible output as it arrives:
+
+```javascript
+// React example
+const [text, setText] = useState("");
+// In SSE reader loop:
+if (content) setText(prev => prev + content);
+```
+
+Strip `<think>...</think>` blocks from display in real-time — only show text outside think tags. Offer a collapsed toggle later if you want to expose reasoning.
+
+### Animated status in React
+
+```javascript
+const THINK = ["Thinking…","Analyzing…","Processing…"];
+const SEARCH = ["Searching knowledge base…","Looking that up…"];
+const [status, setStatus] = useState(THINK[0]);
+const [pool, setPool] = useState("think");
+
+// Cycle every 2s
+useEffect(() => {
+  if (!isStreaming) return;
+  const i = setInterval(() => {
+    setStatus(pool === "think" ? pick(THINK) : pick(SEARCH));
+  }, 2000);
+  return () => clearInterval(i);
+}, [isStreaming, pool]);
+```
+
+### Stopping mid-response
+
+```javascript
+const controller = new AbortController();
+fetch("/chat", { signal: controller.signal }); // React: useRef for controller
+
+function onStopClick() {
+  controller.abort();
+  setStatus(""); // clear status
+  setIsStreaming(false);
+}
+```
+
+Catch `AbortError` in your try/catch — this is expected, not an error. Show whatever text accumulated so far.
+
 ## Markdown
 
 Minimal rendering:

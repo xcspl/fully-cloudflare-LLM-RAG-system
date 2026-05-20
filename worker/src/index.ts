@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatMessage } from "./types";
+import type { ChatRequest, ChatMessage, ToolCall } from "./types";
 import {
   type Env,
   loadSession,
@@ -97,14 +97,35 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   ctx.waitUntil(saveMessage(env, session.id, userId, "user", body.message));
 
   // Tool loop: LLM decides to search or answer directly
-  toolLoop: for (let i = 0; i < 3; i++) {
-    const resp = await callLlm(llmConfig, messages, { stream: false, tools: ALL_TOOLS });
+  for (let i = 0; i < 6; i++) {
+    // Round 0: try streaming first (user sees words if no tools needed)
+    const useStream = (i === 0);
+    const resp = await callLlm(llmConfig, messages, { stream: useStream, tools: ALL_TOOLS });
     if (!resp.ok) {
       const errText = await resp.text();
       console.error(`[gAIa] Tool round ${i} failed: ${resp.status} ${errText}`);
-      return json({ error: `LLM error (round ${i}/${3}): ${resp.status} ${errText}` }, 502);
+      return json({ error: `LLM error (round ${i}/6): ${resp.status} ${errText}` }, 502);
     }
-    const parsed = parseLlmResponse(await resp.json() as Record<string, unknown>);
+
+    let parsed;
+    if (useStream && resp.body) {
+      // Read SSE stream to detect tool_calls vs stop
+      const result = await readSSEStream(resp.body);
+      if (result.toolCalls) {
+        parsed = { content: null, toolCalls: result.toolCalls, finishReason: "tool_calls" };
+      } else {
+        // LLM answered directly — propagate stream to user
+        session.messages = messages.filter((m) => m.role !== "system");
+        ctx.waitUntil(saveSession(env, session));
+        return new Response(result.teeStream, {
+          headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Session-Id": session.id },
+        });
+      }
+    } else {
+      const json = await resp.json() as Record<string, unknown>;
+      parsed = parseLlmResponse(json);
+    }
+
     if (!parsed.toolCalls?.length) break; // LLM chose to answer
 
     // Preserve full tool_call structure (Minimax requires index, type, function)
@@ -119,8 +140,6 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
         const result = context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user.";
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
         await saveMessage(env, session.id, userId, "tool", `[Searched knowledge base: ${JSON.parse(tc.arguments || "{}").query || "unknown"}]`, { tool_call_id: tc.id });
-        // If no results, break tool loop — don't let LLM retry endlessly
-        if (!context) break toolLoop;
       } else if (tc.name === "get_current_time") {
         const now = new Date();
         const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
@@ -225,6 +244,46 @@ async function searchChatHistory(env: Env, session_id: string, query: string): P
   return rows.results
     .map((r) => `[${r.role} at ${r.created_at}]\n${r.content}`)
     .join("\n\n---\n\n");
+}
+
+async function readSSEStream(body: ReadableStream): Promise<{ toolCalls: ToolCall[] | null; teeStream: ReadableStream }> {
+  const [clientStream, saveStream] = body.tee();
+  const reader = saveStream.getReader();
+  const decoder = new TextDecoder();
+  let raw = "";
+  const toolCalls: ToolCall[] = [];
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    raw += decoder.decode(value, { stream: true });
+  }
+
+  const lines = raw.split("\n");
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+    try {
+      const j = JSON.parse(line.slice(6));
+      const delta = j.choices?.[0]?.delta;
+      const finish = j.choices?.[0]?.finish_reason;
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const existing = toolCalls.find((t) => t.index === tc.index);
+          if (existing) {
+            if (tc.function?.name) { existing.function = { ...existing.function, name: tc.function.name }; existing.name = tc.function.name; }
+            if (tc.function?.arguments) { existing.function = { ...existing.function, arguments: (existing.function?.arguments || "") + tc.function.arguments }; existing.arguments = existing.function.arguments; }
+            if (tc.id) existing.id = tc.id;
+          } else {
+            const flat: ToolCall = { index: tc.index, id: tc.id, type: tc.type || "function", function: tc.function, name: tc.function?.name, arguments: tc.function?.arguments };
+            toolCalls.push(flat);
+          }
+        }
+      }
+      if (finish === "tool_calls") return { toolCalls, teeStream: clientStream };
+    } catch {}
+  }
+
+  return { toolCalls: null, teeStream: clientStream };
 }
 
 async function saveMessage(env: Env, session_id: string, user_id: string, role: string, content: string, meta?: Record<string, unknown>): Promise<void> {

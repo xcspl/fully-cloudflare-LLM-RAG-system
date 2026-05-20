@@ -13,7 +13,8 @@ body{font:14px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;height:
 .msg{max-width:80%;padding:.6rem 1rem;border-radius:1rem;white-space:pre-wrap;word-break:break-word}
 .msg.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:.25rem}
 .msg.assistant{align-self:flex-start;background:#1e1e1e;border:1px solid #333;border-bottom-left-radius:.25rem}
-.msg.assistant .status{color:#888;font-style:italic}.msg.assistant strong{color:#fbbf24}.msg.assistant em{color:#93c5fd}
+.msg.assistant .status{color:#888;font-style:italic}.msg.assistant .status::after{content:'';animation:dots 1.5s steps(4,infinite);display:inline-block;width:1em;text-align:left}@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}100%{content:'...'}}
+.msg.assistant strong{color:#fbbf24}.msg.assistant em{color:#93c5fd}
 .msg.assistant code{background:#333;padding:.1em .3em;border-radius:3px;font-size:13px}
 .msg.assistant pre{background:#0a0a0a;border:1px solid #333;border-radius:6px;padding:.75rem;margin:.5em 0;overflow-x:auto;font-size:13px;line-height:1.4}
 .msg.assistant pre code{background:none;padding:0}
@@ -51,7 +52,7 @@ const THINK_WORDS = ["Thinking…","Analyzing…","Processing…","Reasoning…"
 const TOOL_WORDS = ["Searching knowledge base…","Looking that up…","Finding information…","Consulting sources…","Fetching data…"];
 const WAIT_WORDS = ["Working on it…","Almost there…","Getting ready…","Hang tight…"];
 function pick(arr){return arr[Math.floor(Math.random()*arr.length)]}
-let sid = uuidv7(), uid = "web-" + Math.random().toString(36).slice(2, 8), abort, statusDiv;
+let sid = uuidv7(), uid = "web-" + Math.random().toString(36).slice(2, 8), abort, statusTimer;
 
 function newChat(){sid=uuidv7();log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div>'}
 
@@ -63,7 +64,14 @@ document.getElementById("form").onsubmit = async (e) => {
   clearWelcome();
   add("user", m);
   const div = add("assistant", "");
-  showStatus(pick(THINK_WORDS));
+  let currentWord = pick(THINK_WORDS);
+  showStatus(currentWord);
+  // Cycle status words while waiting
+  statusTimer = setInterval(() => {
+    const s = document.querySelectorAll(".msg.assistant .status");
+    const last = s[s.length-1];
+    if (last) { currentWord = pick(last.textContent?.startsWith("Search") ? TOOL_WORDS : THINK_WORDS); last.textContent = currentWord; }
+  }, 2000);
 
   abort = new AbortController();
   sendBtn.style.display = "none";
@@ -80,7 +88,7 @@ document.getElementById("form").onsubmit = async (e) => {
     sid = r.headers.get("X-Session-Id") || sid;
 
     if (r.headers.get("Content-Type")?.includes("text/event-stream")) {
-      div.innerHTML = "";
+      clearInterval(statusTimer);
       const reader = r.body.getReader();
       const decoder = new TextDecoder();
       let buf = "", raw = "";
@@ -98,9 +106,14 @@ document.getElementById("form").onsubmit = async (e) => {
             if (c) raw += c;
           } catch {}
         }
+        // Show word-by-word: only render what's outside <think>
         const parts = splitThink(raw);
         think = parts.think; visible = parts.visible;
-        div.innerHTML = render(visible);
+        if (visible.trim()) {
+          div.innerHTML = render(visible);
+        } else if (think.trim()) {
+          showStatus(pick(THINK_WORDS));
+        }
       }
     } else {
       const d = await r.json();
@@ -117,6 +130,7 @@ document.getElementById("form").onsubmit = async (e) => {
     if (!div.innerHTML.trim()) div.innerHTML = "<em>(empty)</em>";
 
   } catch (x) {
+    clearInterval(statusTimer);
     if (x.name === "AbortError") {
       div.innerHTML = render(visible) || "<em>(stopped)</em>";
       if (think.trim()) div.innerHTML = `<div class="think" onclick="this.classList.toggle('open')">\u{1F4AD} Show reasoning<span class="body">${think.replace(/</g,"&lt;").replace(/\n/g,"<br>")}</span></div>` + div.innerHTML;
@@ -124,6 +138,7 @@ document.getElementById("form").onsubmit = async (e) => {
       div.innerHTML = "<em>Error: " + x.message + "</em>";
     }
   }
+  clearInterval(statusTimer);
   sendBtn.style.display = "";
   stopBtn.style.display = "none";
   abort = null;
