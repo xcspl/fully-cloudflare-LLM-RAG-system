@@ -14,23 +14,19 @@ export interface Env {
 export async function loadSession(
   env: Env,
   user_id: string,
-  session_id?: string,
+  session_id: string,
 ): Promise<Session> {
-  const id = session_id || crypto.randomUUID();
-
-  if (session_id) {
-    const row = await env.DB.prepare(
-      "SELECT * FROM sessions WHERE id = ? AND user_id = ?",
-    ).bind(session_id, user_id).first<Session>();
-    if (row) return row;
-  }
+  const row = await env.DB.prepare(
+    "SELECT * FROM sessions WHERE id = ? AND user_id = ?",
+  ).bind(session_id, user_id).first<Session>();
+  if (row) return row;
 
   const now = new Date().toISOString();
   await env.DB.prepare(
     "INSERT INTO sessions (id, user_id, messages, created_at, updated_at) VALUES (?, ?, '[]', ?, ?)",
-  ).bind(id, user_id, now, now).run();
+  ).bind(session_id, user_id, now, now).run();
 
-  return { id, user_id, messages: [], created_at: now, updated_at: now };
+  return { id: session_id, user_id, messages: [], created_at: now, updated_at: now };
 }
 
 // Load last N messages from chat_messages table

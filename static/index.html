@@ -48,9 +48,9 @@ const log = document.getElementById("log");
 const inp = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
 const stopBtn = document.getElementById("stopBtn");
-let sid = "", uid = "web-" + Math.random().toString(36).slice(2, 8), abort;
+let sid = crypto.randomUUID(), uid = "web-" + Math.random().toString(36).slice(2, 8), abort;
 
-function newChat(){sid="";log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div>'}
+function newChat(){sid=crypto.randomUUID();log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div>'}
 
 document.getElementById("form").onsubmit = async (e) => {
   e.preventDefault();
@@ -70,7 +70,7 @@ document.getElementById("form").onsubmit = async (e) => {
     const r = await fetch(API + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: m, user_id: uid, session_id: sid || void 0 }),
+      body: JSON.stringify({ message: m, user_id: uid, session_id: sid }),
       signal: abort.signal,
     });
     sid = r.headers.get("X-Session-Id") || sid;

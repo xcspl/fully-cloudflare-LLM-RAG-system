@@ -47,8 +47,8 @@ async function handleChat(request: Request, env: Env, ctx: ExecutionContext): Pr
   try { body = await request.json(); } catch {
     return json({ error: "Invalid JSON" }, 400);
   }
-  if (!body.message) {
-    return json({ error: "message is required" }, 400);
+  if (!body.message || !body.session_id) {
+    return json({ error: "message and session_id are required" }, 400);
   }
 
   const session = await loadSession(env, body.user_id, body.session_id);
