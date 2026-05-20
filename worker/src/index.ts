@@ -112,13 +112,13 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     const searchQuery = parsed.toolCalls.map((tc) => {
       try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
     }).filter(Boolean).join(", ");
-    await saveMessage(env, session.id, (body.user_id || ""), "assistant", `[search: ${searchQuery}]`);
+    await saveMessage(env, session.id, (body.user_id || ""), "tool", `[searched knowledge base: ${searchQuery}]`);
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const context = await searchViaDataWorker(env, args.query);
-        messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents found." });
+        messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user." });
       } else if (tc.name === "get_current_time") {
         const now = new Date();
         const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
