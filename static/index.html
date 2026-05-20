@@ -13,7 +13,7 @@ body{font:14px/1.5 system-ui,sans-serif;background:#0f0f0f;color:#e0e0e0;height:
 .msg{max-width:80%;padding:.6rem 1rem;border-radius:1rem;white-space:pre-wrap;word-break:break-word}
 .msg.user{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:.25rem}
 .msg.assistant{align-self:flex-start;background:#1e1e1e;border:1px solid #333;border-bottom-left-radius:.25rem}
-.msg.assistant .status{color:#888;font-style:italic;animation:pulse 2s ease-in-out infinite}.msg.assistant .status::after{content:'';animation:dots 1.5s steps(4,infinite);display:inline-block;width:1em;text-align:left}@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}100%{content:'...'}}@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+.msg.assistant .status{color:#888;font-style:italic;animation:pulse 2s ease-in-out infinite}.msg.assistant .status::after{content:'';animation:dots 1.5s steps(4,infinite);display:inline-block;width:1em;text-align:left}@keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}100%{content:'...'}}@keyframes pulse{0%,100%{opacity:.6;transform:scale(.96)}50%{opacity:1;transform:scale(1)}}
 .msg.assistant strong{color:#fbbf24}.msg.assistant em{color:#93c5fd}
 .msg.assistant code{background:#333;padding:.1em .3em;border-radius:3px;font-size:13px}
 .msg.assistant pre{background:#0a0a0a;border:1px solid #333;border-radius:6px;padding:.75rem;margin:.5em 0;overflow-x:auto;font-size:13px;line-height:1.4}
