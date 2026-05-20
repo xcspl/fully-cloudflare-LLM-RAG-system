@@ -4,7 +4,6 @@ import {
   loadSession,
   saveSession,
   loadChatHistory,
-  saveChatMessages,
 } from "./rag";
 import { callLlm, parseLlmResponse } from "./llm";
 import { selectSystemMessage } from "./system-messages";
@@ -93,6 +92,9 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     { role: "user", content: body.message },
   ];
 
+  // Save user message immediately
+  ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "user", body.message));
+
   // Tool loop: LLM decides to search or answer directly
   for (let i = 0; i < 3; i++) {
     const resp = await callLlm(llmConfig, messages, { stream: false, tools: ALL_TOOLS });
@@ -106,20 +108,31 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     // Preserve full tool_call structure (Minimax requires index, type, function)
     const assistantMsg: ChatMessage = { role: "assistant", content: parsed.content ?? "", tool_calls: parsed.toolCalls };
     messages.push(assistantMsg);
+    // Compact tool call marker for storage
+    const searchQuery = parsed.toolCalls.map((tc) => {
+      try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
+    }).filter(Boolean).join(", ");
+    ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "assistant", `[search: ${searchQuery}]`));
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const context = await searchViaDataWorker(env, args.query);
-        messages.push({ role: "tool", tool_call_id: tc.id, content: context || "No matching documents found." });
+        const toolContent = context || "No matching documents found.";
+        messages.push({ role: "tool", tool_call_id: tc.id, content: toolContent });
+        ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "tool", toolContent));
       } else if (tc.name === "get_current_time") {
         const now = new Date();
         const gmt = now.toISOString().replace("T", " ").slice(0, 19) + " GMT";
-        messages.push({ role: "tool", tool_call_id: tc.id, content: `Current time: ${gmt} | Year: ${now.getUTCFullYear()} | Month: ${now.toLocaleString("en-US", { month: "long", timeZone: "UTC" })}` });
+        const timeContent = `Current time: ${gmt} | Year: ${now.getUTCFullYear()} | Month: ${now.toLocaleString("en-US", { month: "long", timeZone: "UTC" })}`;
+        messages.push({ role: "tool", tool_call_id: tc.id, content: timeContent });
+        ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "tool", timeContent));
       } else if (tc.name === "search_chat_history") {
         const args = JSON.parse(tc.arguments) as { query: string };
         const history = await searchChatHistory(env, session.id, args.query);
-        messages.push({ role: "tool", tool_call_id: tc.id, content: history || "No matching past conversations found." });
+        const historyContent = history || "No matching past conversations found.";
+        messages.push({ role: "tool", tool_call_id: tc.id, content: historyContent });
+        ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "tool", historyContent));
       }
     }
   }
@@ -131,10 +144,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   if (wantStream && !usedTools) {
     const streamResp = await callLlm(llmConfig, messages, { stream: true });
     if (streamResp.ok) {
-      ctx.waitUntil((async () => {
-        await saveChatMessages(env, session.id, (body.user_id || ""), messages.filter((m) => m.role !== "system"));
-        await saveSession(env, session);
-      })());
+      ctx.waitUntil(saveSession(env, session));
       return new Response(streamResp.body, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Session-Id": session.id },
       });
@@ -148,10 +158,10 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   const finalData = await finalResp.json() as Record<string, unknown>;
   const reply = parseLlmResponse(finalData);
   if (reply.content) messages.push({ role: "assistant", content: reply.content });
-  ctx.waitUntil((async () => {
-    await saveChatMessages(env, session.id, (body.user_id || ""), messages.filter((m) => m.role !== "system"));
-    await saveSession(env, session);
-  })());
+  if (reply.content) {
+    ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "assistant", reply.content));
+  }
+  ctx.waitUntil(saveSession(env, session));
 
   if (!reply.content) {
     const raw = JSON.stringify(finalData).slice(0, 300);
@@ -191,6 +201,12 @@ async function searchChatHistory(env: Env, session_id: string, query: string): P
   return rows.results
     .map((r) => `[${r.role} at ${r.created_at}]\n${r.content}`)
     .join("\n\n---\n\n");
+}
+
+async function saveMessage(env: Env, session_id: string, user_id: string, role: string, content: string): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO chat_messages (id, session_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), session_id, user_id, role, content.slice(0, 10000), new Date().toISOString()).run();
 }
 
 async function handleHistory(request: Request, env: Env): Promise<Response> {
