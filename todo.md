@@ -15,6 +15,9 @@
 
 ## Soon
 
+- [ ] **User profile table**: Compacted summary of user's chat history — key topics, preferences, frequently discussed subjects. Updated by merging current session chats + previously compacted profile → new compacted profile. If frontend sends `user_id` and a profile exists, injected into system prompt automatically. Gives LLM instant awareness of who it's talking to.
+- [ ] **Auth validation**: Frontend sends JWT + username → Worker caches 5 min TTL → POST /verify to backend. Cache hit = proceed. Cache miss/deny = blacklist.
+
 - [ ] **Auth validation**: Frontend sends JWT + username → Worker caches 5 min TTL → POST /verify to backend. Cache hit = proceed. Cache miss/deny = blacklist.
 - [ ] **search_chat_history cross-session**: LLM sets `search_all_sessions: true` → Worker searches ALL sessions for that user_id, not just current session
 - [ ] **Chat log cleaner**: Cron worker/script to truncate chat_messages rows for sessions with >500 items; delete sessions older than 6 months
