@@ -35,16 +35,22 @@ export async function loadChatHistory(
   session_id: string,
   limit: number = 50,
 ): Promise<ChatMessage[]> {
-  // Load all messages for context — tool markers are compact and informative
   const { results } = await env.DB.prepare(
-    "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
-  ).bind(session_id, limit).all<{ role: string; content: string }>();
+    "SELECT role, content, metadata FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?",
+  ).bind(session_id, limit).all<{ role: string; content: string; metadata: string | null }>();
 
   if (!results?.length) return [];
-  return results.reverse().map((r) => ({
-    role: r.role as ChatMessage["role"],
-    content: r.content,
-  }));
+  return results.reverse().map((r) => {
+    const msg: ChatMessage = { role: r.role as ChatMessage["role"], content: r.content };
+    if (r.metadata) {
+      try {
+        const meta = JSON.parse(r.metadata);
+        if (meta.tool_call_id) msg.tool_call_id = meta.tool_call_id;
+        if (meta.tool_calls) msg.tool_calls = meta.tool_calls;
+      } catch {}
+    }
+    return msg;
+  });
 }
 
 // Save each message as a row in chat_messages

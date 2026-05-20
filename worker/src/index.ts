@@ -109,11 +109,8 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     // Preserve full tool_call structure (Minimax requires index, type, function)
     const assistantMsg: ChatMessage = { role: "assistant", content: parsed.content ?? "", tool_calls: parsed.toolCalls };
     messages.push(assistantMsg);
-    // Compact tool call marker for storage
-    const searchQuery = parsed.toolCalls.map((tc) => {
-      try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
-    }).filter(Boolean).join(", ");
-    await saveMessage(env, session.id, (body.user_id || ""), "tool", `[searched knowledge base: ${searchQuery}]`);
+    // Save assistant(tool_calls) with metadata so context loads properly paired
+    await saveMessage(env, session.id, (body.user_id || ""), "assistant", "", { tool_calls: parsed.toolCalls });
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
@@ -204,13 +201,13 @@ async function searchViaDataWorker(env: Env, query: string): Promise<string> {
     body: JSON.stringify({ query, scoreThreshold: 0.5 }),
   });
 
-  if (!resp.ok) return "";
+  if (!resp.ok) return "[Search error: Data Worker returned an error. Answer from your own knowledge.]";
 
   const { results } = await resp.json() as {
     results: Array<{ id: string; data: Record<string, unknown>; score: number }>;
   };
 
-  if (!results?.length) return "";
+  if (!results?.length) return "[Search returned no results. Answer from your own knowledge or tell the user.]";
 
   return results
     .map((r) => `## Source: ${r.data.title ?? "Untitled"} (relevance: ${r.score.toFixed(2)})\n${r.data.canonical ?? JSON.stringify(r.data)}`)
@@ -229,10 +226,10 @@ async function searchChatHistory(env: Env, session_id: string, query: string): P
     .join("\n\n---\n\n");
 }
 
-async function saveMessage(env: Env, session_id: string, user_id: string, role: string, content: string): Promise<void> {
+async function saveMessage(env: Env, session_id: string, user_id: string, role: string, content: string, meta?: Record<string, unknown>): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO chat_messages (id, session_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-  ).bind(crypto.randomUUID(), session_id, user_id, role, content.slice(0, 10000), new Date().toISOString()).run();
+    "INSERT INTO chat_messages (id, session_id, user_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), session_id, user_id, role, content.slice(0, 10000), meta ? JSON.stringify(meta) : null, new Date().toISOString()).run();
 }
 
 async function handleHistory(request: Request, env: Env): Promise<Response> {
