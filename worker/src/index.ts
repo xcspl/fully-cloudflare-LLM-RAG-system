@@ -109,8 +109,10 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     // Preserve full tool_call structure (Minimax requires index, type, function)
     const assistantMsg: ChatMessage = { role: "assistant", content: parsed.content ?? "", tool_calls: parsed.toolCalls };
     messages.push(assistantMsg);
-    // Save assistant(tool_calls) with metadata so context loads properly paired
-    await saveMessage(env, session.id, (body.user_id || ""), "assistant", "", { tool_calls: parsed.toolCalls });
+    const q = parsed.toolCalls.map((tc) => {
+      try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
+    }).filter(Boolean).join(", ") || "unknown";
+    await saveMessage(env, session.id, (body.user_id || ""), "tool", `[Searched knowledge base: ${q}]`);
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
