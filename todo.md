@@ -27,7 +27,7 @@
 
 ## Later
 
-- [ ] **Search chaining & query expansion**: LLM can request a wider search using found terms, related words, or looser RRF-k. Like "search again with related terms" or "broaden the search." Follow-up searches feed into each other.
+- [ ] **Search chaining & query expansion**: LLM can improve search by: (1) **query expansion** — adding synonyms/hyponyms to the query before retrieval ("CEO" → "CEO OR executive OR director"); (2) **relevance feedback** — using top results' terms to refine the next query (Rocchio algorithm); (3) **multi-hop/chain-of-search** — LLM searches, reads results, formulates a better follow-up query (used by Perplexity, you.com, Bing Copilot). Also: looser RRF-k for broad exploratory queries.
 - [ ] **Web search tool**: Uncomment `WEB_SEARCH` in tools.ts and implement handler (needs API subscription)
 
 - [ ] **Web search tool**: Uncomment `WEB_SEARCH` in tools.ts and implement handler (needs API subscription)
