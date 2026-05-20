@@ -50,7 +50,8 @@ async function handleChat(request: Request, env: Env, ctx: ExecutionContext): Pr
     return json({ error: "message and session_id are required" }, 400);
   }
 
-  const session = await loadSession(env, body.user_id, body.session_id);
+  const userId = body.user_id || "";
+  const session = await loadSession(env, userId, body.session_id);
   const sysMsg = await selectSystemMessage(env, body.message);
   const fallback = "You are gAIa, the AI assistant for EarthTeam Alliance.";
 
@@ -93,7 +94,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   ];
 
   // Save user message immediately
-  ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "user", body.message));
+  ctx.waitUntil(saveMessage(env, session.id, userId, "user", body.message));
 
   // Tool loop: LLM decides to search or answer directly
   toolLoop: for (let i = 0; i < 3; i++) {
@@ -112,11 +113,11 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     const q = parsed.toolCalls.map((tc) => {
       try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
     }).filter(Boolean).join(", ") || "unknown";
-    await saveMessage(env, session.id, (body.user_id || ""), "tool", `[Searched knowledge base: ${q}]`);
+    await saveMessage(env, session.id, userId, "tool", `[Searched knowledge base: ${q}]`);
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {
-        const args = JSON.parse(tc.arguments) as { query: string };
+        const args = JSON.parse(tc.arguments || "{}") as { query: string };
         const context = await searchViaDataWorker(env, args.query);
         const result = context || "No matching documents in the knowledge base. Answer from your own knowledge or tell the user.";
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
@@ -128,7 +129,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
         const timeContent = `Current time: ${gmt} | Year: ${now.getUTCFullYear()} | Month: ${now.toLocaleString("en-US", { month: "long", timeZone: "UTC" })}`;
         messages.push({ role: "tool", tool_call_id: tc.id, content: timeContent });
       } else if (tc.name === "search_chat_history") {
-        const args = JSON.parse(tc.arguments) as { query: string };
+        const args = JSON.parse(tc.arguments || "{}") as { query: string };
         const history = await searchChatHistory(env, session.id, args.query);
         const historyContent = history || "No matching past conversations found.";
         messages.push({ role: "tool", tool_call_id: tc.id, content: historyContent });
@@ -161,7 +162,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
           .join("");
         if (visible.trim()) {
           const stripped = visible.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-          if (stripped) await saveMessage(env, session.id, (body.user_id || ""), "assistant", stripped);
+          if (stripped) await saveMessage(env, session.id, userId, "assistant", stripped);
         }
       })());
       return new Response(clientStream, {
@@ -183,7 +184,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   if (reply.content) messages.push({ role: "assistant", content: reply.content });
   if (reply.content) {
     const stripped = reply.content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-    if (stripped) ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "assistant", stripped));
+    if (stripped) ctx.waitUntil(saveMessage(env, session.id, userId, "assistant", stripped));
   }
   ctx.waitUntil(saveSession(env, session));
 
