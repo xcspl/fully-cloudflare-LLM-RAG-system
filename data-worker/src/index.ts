@@ -8,6 +8,7 @@ interface Env {
   LLM_BASE_URL: string;
   CANON_PROVIDER: string;
   CANON_MODEL: string;
+  ADMIN_TOKEN: string;
 }
 
 const EMBEDDING_MODEL = "embeddings-bge-m3";
@@ -19,6 +20,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/ingest" && request.method === "POST") return handleIngest(request, env);
     if (url.pathname === "/search" && request.method === "POST") return handleSearch(request, env);
+    if (url.pathname === "/delete" && request.method === "POST") return handleDelete(request, env);
     if (url.pathname === "/health" && request.method === "GET") return healthCheck(env);
     return new Response("Not found", { status: 404 });
   },
@@ -116,6 +118,35 @@ async function handleSearch(request: Request, env: Env): Promise<Response> {
     }));
     return json({ results: resolved });
   } catch (e) { return json({ error: `Search failed: ${e}` }, 500); }
+}
+
+// ── /delete ──
+
+async function handleDelete(request: Request, env: Env): Promise<Response> {
+  // Require shared admin token
+  const auth = request.headers.get("Authorization") || "";
+  if (auth !== `Bearer ${env.ADMIN_TOKEN || ""}` || !env.ADMIN_TOKEN) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+
+  let body: { ids: string[] };
+  try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400); }
+  if (!body.ids?.length) return json({ error: "ids[] required" }, 400);
+
+  try {
+    // Delete from D1
+    const placeholders = body.ids.map(() => "?").join(",");
+    const { meta } = await env.DB.prepare(
+      `DELETE FROM documents WHERE id IN (${placeholders})`,
+    ).bind(...body.ids).run();
+
+    // Delete from Vectorize
+    await env.VECTORIZE.deleteByIds(body.ids);
+
+    return json({ deleted: meta.changes ?? body.ids.length });
+  } catch (e) {
+    return json({ error: `Delete failed: ${e}` }, 500);
+  }
 }
 
 // ── /health ──
