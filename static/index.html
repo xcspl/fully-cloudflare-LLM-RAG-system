@@ -48,9 +48,11 @@ const log = document.getElementById("log");
 const inp = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
 const stopBtn = document.getElementById("stopBtn");
-let sid = crypto.randomUUID(), uid = "web-" + Math.random().toString(36).slice(2, 8), abort;
+// UUIDv7 — RFC 9562, from uuidjs/uuid (MIT), monotonic, time-sortable
+function uuidv7(e={}){let t=e.random||crypto.getRandomValues(new Uint8Array(16)),n=e.msecs??Date.now(),r=e.seq,a=new Uint8Array(16);if(void 0===uuidv7._c){uuidv7._c=0,uuidv7._h=null,uuidv7._l=null}n>uuidv7._c&&void 0===e.msecs&&(uuidv7._c=n,void 0!==r&&(uuidv7._h=uuidv7._l=null));let s=uuidv7._h,f=uuidv7._l;if(void 0!==r&&(r=Math.min(r,2147483647),s=r>>>19&4095,f=1048575&r),null===s||null===f){s=((3&t[6])<<8)|t[7];f=((63&t[8])<<13)|(t[9]<<5)|(t[10]>>>3)}if(n+1e4>uuidv7._c&&void 0===r){if(++f>524287&&(f=0,++s>4095)){s=0,uuidv7._c++}}else uuidv7._c=n;uuidv7._h=s,uuidv7._l=f;let o=uuidv7._c;a[0]=(o/1099511627776)&255,a[1]=(o/4294967296)&255,a[2]=(o/16777216)&255,a[3]=(o/65536)&255,a[4]=(o/256)&255,a[5]=255&o,a[6]=((s>>>4)&15)|112,a[7]=255&s,a[8]=((f>>>13)&63)|128,a[9]=(f>>>5)&255,a[10]=((f<<3)&255)|(7&t[10]),a[11]=t[11],a[12]=t[12],a[13]=t[13],a[14]=t[14],a[15]=t[15];return[...a].map((b,i)=>b.toString(16).padStart(2,"0")+([4,6,8,10].includes(i)?"-":"")).join("")}
+let sid = uuidv7(), uid = "web-" + Math.random().toString(36).slice(2, 8), abort;
 
-function newChat(){sid=crypto.randomUUID();log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div>'}
+function newChat(){sid=uuidv7();log.innerHTML='<div class="welcome"><h1>gAIa</h1><p>EarthTeam\'s AI assistant</p><p>Ask me about conservation, EarthTeam, Freeland,<br>Earth Credits (EarthTeam Stars), or protecting the planet.</p></div>'}
 
 document.getElementById("form").onsubmit = async (e) => {
   e.preventDefault();

@@ -112,7 +112,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
     const searchQuery = parsed.toolCalls.map((tc) => {
       try { return JSON.parse(tc.arguments || "{}").query; } catch { return ""; }
     }).filter(Boolean).join(", ");
-    ctx.waitUntil(saveMessage(env, session.id, (body.user_id || ""), "assistant", `[search: ${searchQuery}]`));
+    await saveMessage(env, session.id, (body.user_id || ""), "assistant", `[search: ${searchQuery}]`);
 
     for (const tc of parsed.toolCalls) {
       if (tc.name === "search_knowledge_base") {

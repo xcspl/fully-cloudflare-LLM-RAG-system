@@ -32,7 +32,7 @@ The request body MUST be JSON. The `Content-Type: application/json` header is re
 |-------|----------|---------|-------|
 | `message` | Yes | — | User text |
 | `user_id` | Yes | — | Per-user identifier. Guest: `"web-" + random`. Persist across sessions |
-| `session_id` | Yes | — | Per-conversation identifier. Created on first message, reused for continuity |
+| `session_id` | Yes | — | Per-conversation identifier. Generate with **UUIDv7** (RFC 9562, time-sortable, monotonic) on each new session. Reuse across messages for continuity |
 | `stream` | No | `true` | `true` = SSE streaming, `false` = JSON |
 
 HTTP header:
