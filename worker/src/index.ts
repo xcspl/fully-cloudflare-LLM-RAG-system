@@ -83,10 +83,7 @@ You have access to a knowledge base via vector search. Use the search_knowledge_
   // Combine identity + time + selected prompt (or fallback)
   const systemContent = identity + temporal + "\n\n" + (sysMsg?.content ?? fallback);
 
-  // Filter history to only user + assistant messages (clean LLM context, no tool chatter)
-  const cleanHistory = session.messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .slice(-10);
+  const cleanHistory = session.messages.slice(-50);
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemContent },
