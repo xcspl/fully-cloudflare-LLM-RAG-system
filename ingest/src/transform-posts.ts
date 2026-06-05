@@ -68,6 +68,23 @@ function isEmpty(v: unknown): boolean {
   return false;
 }
 
+const CANONICALIZE_KEYS = [
+  "title",
+  "region",
+  "country",
+  "primary_action",
+  "secondary_action",
+  "support_needed",
+  "problem_statement",
+  "result_and_outcome",
+  "org_mission",
+  "activities",
+  "impact_tracks",
+  "species_focus",
+  "impact_numbers",
+  "lessons_learned",
+];
+
 function transform(post: RawPost): IngestPayload {
   const data: Record<string, string | number> = {};
 
@@ -80,7 +97,7 @@ function transform(post: RawPost): IngestPayload {
 
   return {
     data,
-    key_keys: Object.keys(data),
+    key_keys: CANONICALIZE_KEYS.filter((k) => k in data),
     source: post.post_type,
     postid: String(post.id),
   };
