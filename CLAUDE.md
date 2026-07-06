@@ -71,7 +71,7 @@ cd data-worker && npx wrangler deploy
 # Chat UI: npx wrangler pages deploy static/ --project-name gaia-chat
 ```
 
-Secrets needed: `CF_AIG_TOKEN` on gaia and gaia-data Workers.
+Secrets needed: `CF_AIG_TOKEN` on gaia and gaia-data Workers. On gaia, the LLM config (`LLM_BASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_MODE`) is also stored as Worker secrets — not dashboard vars — because `wrangler deploy` wipes dashboard-set plain vars (wrangler.toml has no `[vars]`; this broke prod on 2026-07-04).
 
 ## Key gotchas
 
